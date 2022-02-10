@@ -2,7 +2,8 @@ apply plugin: 'com.android.application'
 
 android {
     compileSdkVersion 30
-    ndkVersion '22.1.7171670'
+    ndkVersion "23.1.7779620"
+
     defaultConfig {
         applicationId  "com.google.vulkan.tutorials.five"
         minSdkVersion    24
@@ -27,5 +28,7 @@ android {
     }
    externalNativeBuild.cmake.path 'CMakeLists.txt'
    buildTypes.release.minifyEnabled = false
+
+   externalNativeBuild.cmake.version '3.22.1'
 }
 
