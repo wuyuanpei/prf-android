@@ -227,6 +227,7 @@ void CreateSwapChain(void) {
       .queueFamilyIndexCount = 1,
       .pQueueFamilyIndices = &device.queueFamilyIndex_,
       .preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
+      .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
       .presentMode = VK_PRESENT_MODE_FIFO_KHR,
       .clipped = VK_FALSE,
       .oldSwapchain = VK_NULL_HANDLE,
@@ -245,7 +246,6 @@ void DeleteSwapChain(void) {
   for (int i = 0; i < swapchain.swapchainLength_; i++) {
     vkDestroyFramebuffer(device.device_, swapchain.framebuffers_[i], nullptr);
     vkDestroyImageView(device.device_, swapchain.displayViews_[i], nullptr);
-    vkDestroyImage(device.device_, swapchain.displayImages_[i], nullptr);
   }
   vkDestroySwapchainKHR(device.device_, swapchain.swapchain_, nullptr);
 }
