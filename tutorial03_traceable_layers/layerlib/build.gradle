@@ -11,12 +11,12 @@ apply plugin: 'com.android.library'
  */
 def LAYER_SRC=projectDir.toString() + '/Vulkan-ValidationLayers'
 android {
-    compileSdkVersion 30
+    compileSdkVersion 31
     ndkVersion '22.1.7171670'
 
     defaultConfig {
-        minSdkVersion 26
-        targetSdkVersion 30
+        minSdkVersion 24
+        targetSdkVersion 31
         versionCode 1
         versionName "1.0"
         ndk.abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
@@ -33,6 +33,11 @@ android {
                                '-j8'   // set up the right cpu count, should but do not know
                                        // how to get it from org.gradle.workers.max
         }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
     }
     externalNativeBuild {
         ndkBuild.path "${LAYER_SRC}/build-android/jni/Android.mk"

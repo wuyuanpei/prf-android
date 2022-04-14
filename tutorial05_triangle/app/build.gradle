@@ -1,3 +1,17 @@
+// Copyright 2022 Google Inc. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 apply plugin: 'com.android.application'
 
 android {
@@ -5,11 +19,11 @@ android {
     ndkVersion "23.1.7779620"
 
     defaultConfig {
-        applicationId  "com.google.vulkan.tutorials.five"
+        applicationId  "com.android.example.vulkan.tutorials.five"
         minSdkVersion    24
         targetSdkVersion 31
-        versionCode 1
-        versionName "0.0.1"
+        versionCode 272
+        versionName "1.1.0"
 
         // Shader compilation directives, put glsl shaders to app/src/main/shaders
         // android studio will pick them up and compile them into APK/assets/shaders
@@ -20,16 +34,22 @@ android {
         }
         externalNativeBuild {
             cmake {
-                version "3.22.1"
-                // armeabi is not supported, not building for mips in samples
                 abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
                 arguments '-DANDROID_TOOLCHAIN=clang', '-DANDROID_STL=c++_static'
             }
         }
     }
-   externalNativeBuild.cmake.path 'CMakeLists.txt'
-   buildTypes.release.minifyEnabled = false
-
-   externalNativeBuild.cmake.version '3.18.1'
+    externalNativeBuild {
+        cmake {
+            version '3.18.1'
+            path 'src/main/cpp/CMakeLists.txt'
+        }
+    }
+    buildTypes.release.minifyEnabled = false
+    buildFeatures.prefab  = true
 }
 
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.4.1'
+    implementation "androidx.games:games-activity:1.1.0"
+}
