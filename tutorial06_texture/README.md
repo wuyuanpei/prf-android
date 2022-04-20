@@ -8,7 +8,7 @@ Description
 *  adding texture to triangle
 
 
-Prerequirement
+Requirement
 --------------
 Pre-build shaderc with:
  mkdir -p  app/src/main/cpp/shaderc

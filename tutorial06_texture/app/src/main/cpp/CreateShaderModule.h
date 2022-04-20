@@ -19,7 +19,7 @@
 #define TUTORIAL06_TEXTURE_CREATESHADERMODULE_H
 
 #include <vulkan_wrapper.h>
-#include <android_native_app_glue.h>
+#include <game-activity/native_app_glue/android_native_app_glue.h>
 /*
  * buildShaderFromFile()
  *   Create a Vulkan shader module from the given glsl shader file

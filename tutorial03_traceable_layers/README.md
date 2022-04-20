@@ -20,7 +20,7 @@ We recommend developers to get the validation layer source and binary releases d
 
 # Build Instructions
 In this sample, the validation layers is wrapped into a gradle library module called "layerlib", it is a dependent module to application
-code(to force it build before app).The validation layer source code needs to be pulled in ahead of time before building the sample:
+code(to force it build before app).The validation layer source code needs to be pulled in on command line before building the sample:
 1. cd tutorial03_traceable_layers/layerlib
 2. git clone --recursive https://github.com/KhronosGroup/Vulkan-ValidationLayers.git
 3. cd Vulkan-ValidationLayers/build-android

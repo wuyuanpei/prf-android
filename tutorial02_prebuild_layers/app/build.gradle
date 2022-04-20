@@ -35,15 +35,16 @@ task unzip(dependsOn: download, type: Copy) {
 
 // This project's build scripts follows
 android {
-    compileSdkVersion 30
+    compileSdkVersion 31
     ndkVersion '22.1.7171670'
 
     defaultConfig {
-        applicationId "com.vulkan.tutorials.two"
+        applicationId "com.android.example.vulkan.tutorials.two"
         minSdkVersion 26
-        targetSdkVersion 30
-        versionCode = 1
-        versionName = "0.0.1"
+        targetSdkVersion 31
+
+        versionCode  272
+        versionName  "1.1.0"
         externalNativeBuild {
             cmake {
                 abiFilters "armeabi-v7a", 'arm64-v8a', 'x86', 'x86_64'
@@ -53,8 +54,8 @@ android {
     }
     externalNativeBuild {
         cmake {
-            version '3.10.2'
-            path 'src/main/jni/CMakeLists.txt'
+            version '3.18.1'
+            path 'src/main/cpp/CMakeLists.txt'
         }
     }
 
@@ -71,7 +72,8 @@ android {
         release {
              minifyEnabled = false
         }
-     }
+    }
+    buildFeatures.prefab = true
 }
 
 dependencies {
@@ -81,4 +83,6 @@ dependencies {
             builtBy 'unzip'
         }
     }
+    implementation 'androidx.appcompat:appcompat:1.4.1'
+    implementation "androidx.games:games-activity:1.1.0"
 }

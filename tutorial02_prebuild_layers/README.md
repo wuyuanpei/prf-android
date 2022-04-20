@@ -1,13 +1,13 @@
 # Tutorial 02 - use validation layers - 1
 
-Demonstrate how to use validaton layers prebuilt from [Validation layer repo][1]
+Demonstrate how to use validation layers prebuilt from [Validation layer repo][1]
 
 ## Pre-requirement:
 ---------------
 1. Download prebuilt validation layer android-binaries-*.zip from [Khronos repo][1]
 1. unzip to $this-project-root/vvl-libs
 
-## Added steps from prvious example
+## Added steps from previous example
 1. Use vulkan wrappers in common/vulkan_wrapper directory.
 1. Add the validation layer into gradle build to pack it into apk.
 1. (Optional but nice to have)Confirm the validation layer "VK_LAYER_KHRONOS_validation" is available with `vkEnumerateInstanceLayerProperties()`. 
@@ -17,7 +17,7 @@ Demonstrate how to use validaton layers prebuilt from [Validation layer repo][1]
 # Verification
 Planted error: this sample sets [`VkDeviceQueueCreateInfo::pQueuePriorities`][2](https://github.com/googlesamples/android-vulkan-tutorials/blob/master/tutorial02_prebuild_layers/app/src/main/jni/main.cpp#L190) to nullptr,
 which will trigger validation layers to notify us from registered callback function
-`vkDebugReportCallbackEX_impl();` putting a breakpoint with Android Studo, observe
+`vkDebugReportCallbackEX_impl();` putting a breakpoint with Android Studio, observe
 the breakpoint being triggered.
 
 In logcat, you would see the error message like:
