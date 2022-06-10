@@ -54,7 +54,7 @@ if (${ANDROID_ABI} STREQUAL "armeabi-v7a")
 endif()
 
 # requirement: prebuild shaderc with:
-#  cd  ${CMAKE_CURRENT_SOURCE_DIR} && mkdir -p shaderc
+#  cd  ${CMAKE_CURRENT_SOURCE_DIR} && mkdir -p shaderc && cd shaderc
 #  ${ANDROID_NDK}/ndk-build NDK_PROJECT_PATH=. APP_BUILD_SCRIPT=${ANDROID_NDK}/sources/third_party/shaderc/Android.mk APP_STL:=all APP_ABI:=all APP_PLATFORM:=android-26 libshaderc_combined
 add_library(shaderc STATIC IMPORTED)
 set_target_properties(shaderc PROPERTIES IMPORTED_LOCATION
