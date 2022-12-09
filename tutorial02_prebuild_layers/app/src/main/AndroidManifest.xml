@@ -2,7 +2,6 @@
 <!-- BEGIN_INCLUDE(manifest) -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
-    package="com.android.example.vulkan.tutorials.two"
     android:versionCode="272"
     android:versionName="1.1.0">
 
