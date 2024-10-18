@@ -1,3 +1,14 @@
+# PRF-Android
+
+## Environment for Compilation
+In Android Studio, 
+- Please set Gradle to version 7.3.3 (File->Project Structure)
+- Please set Gradle JDK to version jbr-17 (File->Settings->Build,Execution,Deployment->Build Tools->Gradle)
+
+Then build the project again.
+
+
+
 Tutorial Samples
 ================
 A set of samples to illustrate Vulkan API on Android with Android Studio		
