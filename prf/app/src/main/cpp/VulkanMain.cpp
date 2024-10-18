@@ -13,62 +13,30 @@
 // limitations under the License.
 
 #include "VulkanMain.hpp"
-#include <vulkan_wrapper.h>
 
-#include <android/log.h>
+#include "log.h"
+
+// Vulkan相关
+#include "vulkan/utils.h"
+#include "vulkan/instance.h"
+#include "vulkan/surface.h"
+#include "vulkan/physical_device.h"
+#include "vulkan/queue_family_index.h"
+#include "vulkan/device.h"
+#include "vulkan/queue.h"
+#include "vulkan/swapchain.h"
+
+#include <vulkan_wrapper.h>
 
 #include <cassert>
 #include <cstring>
 #include <vector>
 
-// Android log function wrappers
-static const char *kTAG = "Vulkan-prf-android";
-#define LOGI(...) \
-  ((void)__android_log_print(ANDROID_LOG_INFO, kTAG, __VA_ARGS__))
-#define LOGW(...) \
-  ((void)__android_log_print(ANDROID_LOG_WARN, kTAG, __VA_ARGS__))
-#define LOGE(...) \
-  ((void)__android_log_print(ANDROID_LOG_ERROR, kTAG, __VA_ARGS__))
-
-// Vulkan call wrapper
-#define CALL_VK(func)                                                 \
-  if (VK_SUCCESS != (func)) {                                         \
-    __android_log_print(ANDROID_LOG_ERROR,                            \
-                        "Vulkan error. File[%s], line[%d]", __FILE__, \
-                        __LINE__);                                    \
-    assert(false);                                                    \
-  }
-
-// Vulkan设备信息
-struct VulkanDeviceInfo {
-    bool initialized_;
-
-    VkInstance instance_;
-    VkPhysicalDevice gpuDevice_;
-    VkDevice device_;
-    uint32_t queueFamilyIndex_;
-
-    VkSurfaceKHR surface_;
-    VkQueue queue_;
-};
 VulkanDeviceInfo device;
-
-// Vulkan交换链信息
-struct VulkanSwapchainInfo {
-    VkSwapchainKHR swapchain_;
-    uint32_t swapchainLength_;
-
-    VkExtent2D displaySize_;
-    VkFormat displayFormat_;
-
-    // array of frame buffers and views
-    std::vector<VkImage> displayImages_;
-    std::vector<VkImageView> displayViews_;
-    std::vector<VkFramebuffer> framebuffers_;
-};
 VulkanSwapchainInfo swapchain;
 
-// 这是什么缓冲？
+
+// 顶点缓冲
 struct VulkanBufferInfo {
     VkBuffer vertexBuf_;
 };
@@ -105,205 +73,14 @@ void setImageLayout(VkCommandBuffer cmdBuffer, VkImage image,
                     VkPipelineStageFlags srcStages,
                     VkPipelineStageFlags destStages);
 
-// 依次创建 vulkan instance、surface、physical device、device
-void CreateVulkanDevice(ANativeWindow *platformWindow,
-                        VkApplicationInfo *appInfo) {
-    std::vector<const char *> instance_extensions; // 实例扩展
-    std::vector<const char *> device_extensions; // 设备扩展
 
-    // 所需扩展
-    instance_extensions.push_back("VK_KHR_surface");
-    instance_extensions.push_back("VK_KHR_android_surface");
-
-    LOGI("instance extensions needed:");
-    for (const auto &extension: instance_extensions) {
-        LOGI("\t%s", extension);
-    }
-
-    device_extensions.push_back("VK_KHR_swapchain");
-
-    LOGI("device extensions needed:");
-    for (const auto &extension: device_extensions) {
-        LOGI("\t%s", extension);
-    }
-
-    // **********************************************************
-    // Create the Vulkan instance
-    VkInstanceCreateInfo instanceCreateInfo{
-            .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-            .pNext = nullptr,
-            .pApplicationInfo = appInfo,
-            .enabledLayerCount = 0,
-            .ppEnabledLayerNames = nullptr,
-            .enabledExtensionCount =
-            static_cast<uint32_t>(instance_extensions.size()),
-            .ppEnabledExtensionNames = instance_extensions.data(),
-    };
-    CALL_VK(vkCreateInstance(&instanceCreateInfo, nullptr, &device.instance_));
-
-    // 创建surface
-    VkAndroidSurfaceCreateInfoKHR createInfo{
-            .sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR,
-            .pNext = nullptr,
-            .flags = 0,
-            .window = platformWindow};
-
-    CALL_VK(vkCreateAndroidSurfaceKHR(device.instance_, &createInfo, nullptr,
-                                      &device.surface_));
-    // Find one GPU to use:
-    // On Android, every GPU device is equal -- supporting
-    // graphics/compute/present
-    // for this sample, we use the very first GPU device found on the system
-    uint32_t gpuCount = 0;
-    CALL_VK(vkEnumeratePhysicalDevices(device.instance_, &gpuCount, nullptr));
-    VkPhysicalDevice tmpGpus[gpuCount];
-    CALL_VK(vkEnumeratePhysicalDevices(device.instance_, &gpuCount, tmpGpus));
-    device.gpuDevice_ = tmpGpus[0];  // Pick up the first GPU Device
-
-    // 打印一些设备信息
-    VkPhysicalDeviceProperties properties;
-    vkGetPhysicalDeviceProperties( device.gpuDevice_, &properties );
-    LOGI("physical device: [%d] %s", properties.deviceID, properties.deviceName);
-
-    // Find a GFX queue family
-    uint32_t queueFamilyCount;
-    vkGetPhysicalDeviceQueueFamilyProperties(device.gpuDevice_, &queueFamilyCount,
-                                             nullptr);
-    assert(queueFamilyCount); // 至少需要一个队列族
-    std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamilyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(device.gpuDevice_, &queueFamilyCount,
-                                             queueFamilyProperties.data());
-
-    // 找到一个支持graphics的队列族
-    uint32_t queueFamilyIndex;
-    for (queueFamilyIndex = 0; queueFamilyIndex < queueFamilyCount;
-         queueFamilyIndex++) {
-        if (queueFamilyProperties[queueFamilyIndex].queueFlags &
-            VK_QUEUE_GRAPHICS_BIT) {
-            break;
-        }
-    }
-    assert(queueFamilyIndex < queueFamilyCount); // 必须要找到
-    device.queueFamilyIndex_ = queueFamilyIndex;
-
-    // Create a logical device (vulkan device)
-    float priorities = 1.0f;
-    VkDeviceQueueCreateInfo queueCreateInfo{
-            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .queueFamilyIndex = queueFamilyIndex,
-            .queueCount = 1, // 针对一个队列族我们所需的队列数量
-            .pQueuePriorities = &priorities, // 必须显示地赋予队列优先级
-    };
-
-    VkDeviceCreateInfo deviceCreateInfo{
-            .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-            .pNext = nullptr,
-            .queueCreateInfoCount = 1,
-            .pQueueCreateInfos = &queueCreateInfo,
-            .enabledLayerCount = 0,
-            .ppEnabledLayerNames = nullptr,
-            .enabledExtensionCount = static_cast<uint32_t>(device_extensions.size()),
-            .ppEnabledExtensionNames = device_extensions.data(),
-            .pEnabledFeatures = nullptr,
-    };
-
-    CALL_VK(vkCreateDevice(device.gpuDevice_, &deviceCreateInfo, nullptr,
-                           &device.device_));
-
-    //赋值队列句柄，参数依次是逻辑设备对象，队列族索引，队列索引
-    vkGetDeviceQueue(device.device_, device.queueFamilyIndex_, 0, &device.queue_);
-}
-
-// 创建交换链
-void CreateSwapChain(void) {
-
-    memset(&swapchain, 0, sizeof(swapchain));
-
-    // **********************************************************
-    // Get the surface capabilities because:
-    //   - It contains the minimal and max length of the chain, we will need it
-    //   - It's necessary to query the supported surface format (R8G8B8A8 for
-    //   instance ...)
-    VkSurfaceCapabilitiesKHR surfaceCapabilities;
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device.gpuDevice_, device.surface_,
-                                              &surfaceCapabilities);
-    // Query the list of supported surface format and choose one we like
-    uint32_t formatCount = 0;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device.gpuDevice_, device.surface_,
-                                         &formatCount, nullptr);
-    VkSurfaceFormatKHR formats[formatCount];
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device.gpuDevice_, device.surface_,
-                                         &formatCount, formats);
-
-    // 使用 VK_FORMAT_R8G8B8A8_UNORM
-    uint32_t chosenFormat;
-    for (chosenFormat = 0; chosenFormat < formatCount; chosenFormat++) {
-        if (formats[chosenFormat].format == VK_FORMAT_R8G8B8A8_UNORM) break;
-    }
-    assert(chosenFormat < formatCount);
-
-    swapchain.displaySize_ = surfaceCapabilities.currentExtent;
-    swapchain.displayFormat_ = formats[chosenFormat].format;
-
-    VkSurfaceCapabilitiesKHR surfaceCap;
-    CALL_VK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device.gpuDevice_,
-                                                      device.surface_, &surfaceCap));
-    assert(surfaceCap.supportedCompositeAlpha | VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR); // 应该是考虑到安卓使用HWC合成
-
-    // **********************************************************
-    // Create a swap chain (here we choose the minimum available number of surface
-    // in the chain)
-    VkSwapchainCreateInfoKHR swapchainCreateInfo{
-            .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-            .pNext = nullptr,
-            .surface = device.surface_,
-            .minImageCount = surfaceCapabilities.minImageCount,
-            .imageFormat = formats[chosenFormat].format,
-            .imageColorSpace = formats[chosenFormat].colorSpace,
-            .imageExtent = surfaceCapabilities.currentExtent,
-            .imageArrayLayers = 1, // 每个图像所包含的层次，非VR都是1
-            .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, // 对图像做什么操作：附上颜色。其他的还有后期处理等
-            .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE, // 一张图像同时只能被一个队列族所有，必须要显示改变所有权，性能最佳
-            .queueFamilyIndexCount = 1,
-            .pQueueFamilyIndices = &device.queueFamilyIndex_,
-            .preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
-            .compositeAlpha = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR,
-            .presentMode = VK_PRESENT_MODE_FIFO_KHR,
-            .clipped = VK_FALSE,
-            .oldSwapchain = VK_NULL_HANDLE,
-    };
-    CALL_VK(vkCreateSwapchainKHR(device.device_, &swapchainCreateInfo, nullptr,
-                                 &swapchain.swapchain_));
-
-    // 获取交换链中图像的数量（这里没有获取图像对象）
-    CALL_VK(vkGetSwapchainImagesKHR(device.device_, swapchain.swapchain_,
-                                    &swapchain.swapchainLength_, nullptr));
-
-    // 打印交换链中 的一些信息
-    LOGI("swapChain:");
-    LOGI("\tformat: %d, %d", formats[chosenFormat].format, formats[chosenFormat].colorSpace);
-    LOGI("\tmode: VK_PRESENT_MODE_FIFO_KHR");
-    LOGI("\textent: w=%d, h=%d", swapchain.displaySize_.width, swapchain.displaySize_.height);
-    LOGI("\timageCount: %d", swapchain.swapchainLength_);
-}
-
-void DeleteSwapChain(void) {
-    for (int i = 0; i < swapchain.swapchainLength_; i++) {
-        vkDestroyFramebuffer(device.device_, swapchain.framebuffers_[i], nullptr);
-        vkDestroyImageView(device.device_, swapchain.displayViews_[i], nullptr);
-    }
-    vkDestroySwapchainKHR(device.device_, swapchain.swapchain_, nullptr);
-}
-
-void CreateFrameBuffers(VkRenderPass &renderPass,
-                        VkImageView depthView = VK_NULL_HANDLE) {
+// 创建Image、imageView、FrameBuffer
+void CreateFrameBuffers(VkRenderPass &renderPass) {
     // query display attachment to swapchain
-    uint32_t SwapchainImagesCount = 0;
-    CALL_VK(vkGetSwapchainImagesKHR(device.device_, swapchain.swapchain_,
-                                    &SwapchainImagesCount, nullptr));
+    uint32_t SwapchainImagesCount = swapchain.swapchainLength_;
+
     swapchain.displayImages_.resize(SwapchainImagesCount);
+
     CALL_VK(vkGetSwapchainImagesKHR(device.device_, swapchain.swapchain_,
                                     &SwapchainImagesCount,
                                     swapchain.displayImages_.data()));
@@ -316,10 +93,11 @@ void CreateFrameBuffers(VkRenderPass &renderPass,
                 .pNext = nullptr,
                 .flags = 0,
                 .image = swapchain.displayImages_[i],
-                .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                .viewType = VK_IMAGE_VIEW_TYPE_2D, // 二维纹理
                 .format = swapchain.displayFormat_,
                 .components =
                         {
+                                // 使用默认的颜色通道映射（比如单色纹理可以将所有颜色通道映射到红色）
                                 .r = VK_COMPONENT_SWIZZLE_R,
                                 .g = VK_COMPONENT_SWIZZLE_G,
                                 .b = VK_COMPONENT_SWIZZLE_B,
@@ -327,6 +105,7 @@ void CreateFrameBuffers(VkRenderPass &renderPass,
                         },
                 .subresourceRange =
                         {
+                                // subresourceRange指定图像用途和哪一部分可以被使用
                                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                                 .baseMipLevel = 0,
                                 .levelCount = 1,
@@ -340,20 +119,19 @@ void CreateFrameBuffers(VkRenderPass &renderPass,
     // create a framebuffer from each swapchain image
     swapchain.framebuffers_.resize(swapchain.swapchainLength_);
     for (uint32_t i = 0; i < swapchain.swapchainLength_; i++) {
-        VkImageView attachments[2] = {
-                swapchain.displayViews_[i], depthView,
+        VkImageView attachments[] = {
+                swapchain.displayViews_[i]
         };
         VkFramebufferCreateInfo fbCreateInfo{
                 .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
                 .pNext = nullptr,
                 .renderPass = renderPass,
-                .attachmentCount = 1,  // 2 if using depth
+                .attachmentCount = 1,
                 .pAttachments = attachments,
                 .width = static_cast<uint32_t>(swapchain.displaySize_.width),
                 .height = static_cast<uint32_t>(swapchain.displaySize_.height),
                 .layers = 1,
         };
-        fbCreateInfo.attachmentCount = (depthView == VK_NULL_HANDLE ? 1 : 2);
 
         CALL_VK(vkCreateFramebuffer(device.device_, &fbCreateInfo, nullptr,
                                     &swapchain.framebuffers_[i]));
@@ -672,50 +450,50 @@ bool InitVulkan(android_app *app) {
         return false;
     }
 
-    VkApplicationInfo appInfo = {
-            .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-            .pNext = nullptr,
-            .pApplicationName = "prf-android",
-            .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
-            .pEngineName = "No Engine",
-            .engineVersion = VK_MAKE_VERSION(1, 0, 0),
-            .apiVersion = VK_MAKE_VERSION(1, 1, 0), // 使用vulkan 1.1
-    };
-
-    // 依次创建 vulkan instance、surface、physical device、device
-    CreateVulkanDevice(app->window, &appInfo);
+    // 依次创建vulkan全局数据结构
+    device.instance_ = getInstance();
+    device.surface_ = getSurface(device.instance_, app->window);
+    device.gpuDevice_ = getPhysicalDevice(device.instance_, device.surface_);
+    device.queueFamilyIndex_ = getQueueFamilyIndex(device.gpuDevice_);
+    device.device_ = getDevice(device.gpuDevice_, device.queueFamilyIndex_);
+    device.queue_ = getQueue(device.device_, device.queueFamilyIndex_);
 
     // 创建交换链
-    CreateSwapChain();
+    getSwapChain(device.surface_, device.gpuDevice_, device.queueFamilyIndex_, device.device_, &swapchain);
 
     // -----------------------------------------------------------------
     // Create render pass
     VkAttachmentDescription attachmentDescriptions{
             .format = swapchain.displayFormat_,
-            .samples = VK_SAMPLE_COUNT_1_BIT,
-            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+            .samples = VK_SAMPLE_COUNT_1_BIT, // 采样数
+            //下面两个会对颜色缓冲和深度缓冲奏效
+            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, // 现有buffer会被清除
+            .storeOp = VK_ATTACHMENT_STORE_OP_STORE, // 渲染内容会被储存起来，以便之后读取
             .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
             .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-            .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED, // 不关心之前的图像，因为会清除
+            .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, // 渲染之后的图像会被交换链呈现
     };
 
     VkAttachmentReference colourReference = {
-            .attachment = 0, .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+            .attachment = 0, // index，引用第一个attachment
+            .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
 
+    // 描述子流程
     VkSubpassDescription subpassDescription{
             .flags = 0,
             .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
             .inputAttachmentCount = 0,
             .pInputAttachments = nullptr,
-            .colorAttachmentCount = 1,
-            .pColorAttachments = &colourReference,
+            .colorAttachmentCount = 1, // 引用的颜色附着
+            .pColorAttachments = &colourReference, // 对应了layout(location=0) out vec4 outColor里的location=0
             .pResolveAttachments = nullptr,
             .pDepthStencilAttachment = nullptr,
             .preserveAttachmentCount = 0,
             .pPreserveAttachments = nullptr,
     };
+
+    // 创建渲染流程对象
     VkRenderPassCreateInfo renderPassCreateInfo{
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
             .pNext = nullptr,
@@ -730,10 +508,11 @@ bool InitVulkan(android_app *app) {
                                &render.renderPass_));
 
     // -----------------------------------------------------------------
-    // Create 2 frame buffers.
+    // 创建Image、imageView、FrameBuffer
     CreateFrameBuffers(render.renderPass_);
 
-    CreateBuffers();  // create vertex buffers
+    // create vertex buffers
+    CreateBuffers();
 
     // Create graphics pipeline
     CreateGraphicsPipeline();
@@ -847,7 +626,7 @@ void DeleteVulkan(void) {
 
     vkDestroyCommandPool(device.device_, render.cmdPool_, nullptr);
     vkDestroyRenderPass(device.device_, render.renderPass_, nullptr);
-    DeleteSwapChain();
+    DeleteSwapChain(device.device_, &swapchain);
     DeleteGraphicsPipeline();
     DeleteBuffers();
 
