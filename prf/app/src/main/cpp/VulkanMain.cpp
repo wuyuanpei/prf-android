@@ -25,6 +25,8 @@
 #include "vulkan/device.h"
 #include "vulkan/queue.h"
 #include "vulkan/swapchain.h"
+#include "vulkan/render_pass.h"
+#include "vulkan/frame_buffers.h"
 
 #include <vulkan_wrapper.h>
 
@@ -72,71 +74,6 @@ void setImageLayout(VkCommandBuffer cmdBuffer, VkImage image,
                     VkImageLayout oldImageLayout, VkImageLayout newImageLayout,
                     VkPipelineStageFlags srcStages,
                     VkPipelineStageFlags destStages);
-
-
-// 创建Image、imageView、FrameBuffer
-void CreateFrameBuffers(VkRenderPass &renderPass) {
-    // query display attachment to swapchain
-    uint32_t SwapchainImagesCount = swapchain.swapchainLength_;
-
-    swapchain.displayImages_.resize(SwapchainImagesCount);
-
-    CALL_VK(vkGetSwapchainImagesKHR(device.device_, swapchain.swapchain_,
-                                    &SwapchainImagesCount,
-                                    swapchain.displayImages_.data()));
-
-    // create image view for each swapchain image
-    swapchain.displayViews_.resize(SwapchainImagesCount);
-    for (uint32_t i = 0; i < SwapchainImagesCount; i++) {
-        VkImageViewCreateInfo viewCreateInfo = {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                .pNext = nullptr,
-                .flags = 0,
-                .image = swapchain.displayImages_[i],
-                .viewType = VK_IMAGE_VIEW_TYPE_2D, // 二维纹理
-                .format = swapchain.displayFormat_,
-                .components =
-                        {
-                                // 使用默认的颜色通道映射（比如单色纹理可以将所有颜色通道映射到红色）
-                                .r = VK_COMPONENT_SWIZZLE_R,
-                                .g = VK_COMPONENT_SWIZZLE_G,
-                                .b = VK_COMPONENT_SWIZZLE_B,
-                                .a = VK_COMPONENT_SWIZZLE_A,
-                        },
-                .subresourceRange =
-                        {
-                                // subresourceRange指定图像用途和哪一部分可以被使用
-                                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                .baseMipLevel = 0,
-                                .levelCount = 1,
-                                .baseArrayLayer = 0,
-                                .layerCount = 1,
-                        },
-        };
-        CALL_VK(vkCreateImageView(device.device_, &viewCreateInfo, nullptr,
-                                  &swapchain.displayViews_[i]));
-    }
-    // create a framebuffer from each swapchain image
-    swapchain.framebuffers_.resize(swapchain.swapchainLength_);
-    for (uint32_t i = 0; i < swapchain.swapchainLength_; i++) {
-        VkImageView attachments[] = {
-                swapchain.displayViews_[i]
-        };
-        VkFramebufferCreateInfo fbCreateInfo{
-                .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-                .pNext = nullptr,
-                .renderPass = renderPass,
-                .attachmentCount = 1,
-                .pAttachments = attachments,
-                .width = static_cast<uint32_t>(swapchain.displaySize_.width),
-                .height = static_cast<uint32_t>(swapchain.displaySize_.height),
-                .layers = 1,
-        };
-
-        CALL_VK(vkCreateFramebuffer(device.device_, &fbCreateInfo, nullptr,
-                                    &swapchain.framebuffers_[i]));
-    }
-}
 
 // A helper function
 bool MapMemoryTypeToIndex(uint32_t typeBits, VkFlags requirements_mask,
@@ -461,55 +398,15 @@ bool InitVulkan(android_app *app) {
     // 创建交换链
     getSwapChain(device.surface_, device.gpuDevice_, device.queueFamilyIndex_, device.device_, &swapchain);
 
-    // -----------------------------------------------------------------
-    // Create render pass
-    VkAttachmentDescription attachmentDescriptions{
-            .format = swapchain.displayFormat_,
-            .samples = VK_SAMPLE_COUNT_1_BIT, // 采样数
-            //下面两个会对颜色缓冲和深度缓冲奏效
-            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, // 现有buffer会被清除
-            .storeOp = VK_ATTACHMENT_STORE_OP_STORE, // 渲染内容会被储存起来，以便之后读取
-            .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-            .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED, // 不关心之前的图像，因为会清除
-            .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, // 渲染之后的图像会被交换链呈现
-    };
+    // 创建render pass
+    render.renderPass_ = getRenderPass(device.device_, swapchain.displayFormat_);
 
-    VkAttachmentReference colourReference = {
-            .attachment = 0, // index，引用第一个attachment
-            .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    // 依次创建Image、imageView、FrameBuffer
+    getFrameBuffers(device.device_, render.renderPass_, &swapchain);
 
-    // 描述子流程
-    VkSubpassDescription subpassDescription{
-            .flags = 0,
-            .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-            .inputAttachmentCount = 0,
-            .pInputAttachments = nullptr,
-            .colorAttachmentCount = 1, // 引用的颜色附着
-            .pColorAttachments = &colourReference, // 对应了layout(location=0) out vec4 outColor里的location=0
-            .pResolveAttachments = nullptr,
-            .pDepthStencilAttachment = nullptr,
-            .preserveAttachmentCount = 0,
-            .pPreserveAttachments = nullptr,
-    };
 
-    // 创建渲染流程对象
-    VkRenderPassCreateInfo renderPassCreateInfo{
-            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-            .pNext = nullptr,
-            .attachmentCount = 1,
-            .pAttachments = &attachmentDescriptions,
-            .subpassCount = 1,
-            .pSubpasses = &subpassDescription,
-            .dependencyCount = 0,
-            .pDependencies = nullptr,
-    };
-    CALL_VK(vkCreateRenderPass(device.device_, &renderPassCreateInfo, nullptr,
-                               &render.renderPass_));
+// ============================ 以上为初始化完成，以下为每帧的信息（cmdpool可能可以初始化创建）============================
 
-    // -----------------------------------------------------------------
-    // 创建Image、imageView、FrameBuffer
-    CreateFrameBuffers(render.renderPass_);
 
     // create vertex buffers
     CreateBuffers();
@@ -564,7 +461,7 @@ bool InitVulkan(android_app *app) {
 
         // Now we start a renderpass. Any draw command has to be recorded in a
         // renderpass
-        VkClearValue clearVals{.color {.float32 {0.0f, 0.34f, 0.90f, 1.0f}}};
+        VkClearValue clearVals{.color {.float32 {0.0f, 0.9f, 0.90f, 1.0f}}};
         VkRenderPassBeginInfo renderPassBeginInfo{
                 .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
                 .pNext = nullptr,
