@@ -27,6 +27,7 @@
 #include "vulkan/swapchain.h"
 #include "vulkan/render_pass.h"
 #include "vulkan/frame_buffers.h"
+#include "vulkan/command_pool.h"
 
 #include <vulkan_wrapper.h>
 
@@ -404,6 +405,9 @@ bool InitVulkan(android_app *app) {
     // 依次创建Image、imageView、FrameBuffer
     getFrameBuffers(device.device_, render.renderPass_, &swapchain);
 
+    // 创建指令池
+    render.cmdPool_ = getCommandPool(device.device_, device.queueFamilyIndex_);
+
 
 // ============================ 以上为初始化完成，以下为每帧的信息（cmdpool可能可以初始化创建）============================
 
@@ -415,15 +419,7 @@ bool InitVulkan(android_app *app) {
     CreateGraphicsPipeline();
 
     // -----------------------------------------------
-    // Create a pool of command buffers to allocate command buffer from
-    VkCommandPoolCreateInfo cmdPoolCreateInfo{
-            .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-            .queueFamilyIndex = device.queueFamilyIndex_,
-    };
-    CALL_VK(vkCreateCommandPool(device.device_, &cmdPoolCreateInfo, nullptr,
-                                &render.cmdPool_));
+
 
     // Record a command buffer that just clear the screen
     // 1 command buffer draw in 1 framebuffer
@@ -514,7 +510,9 @@ bool InitVulkan(android_app *app) {
 
 // IsVulkanReady():
 //    native app poll to see if we are ready to draw...
-bool IsVulkanReady(void) { return device.initialized_; }
+bool IsVulkanReady(void) {
+    return device.initialized_;
+}
 
 void DeleteVulkan(void) {
     vkFreeCommandBuffers(device.device_, render.cmdPool_, render.cmdBufferLen_,
