@@ -11,8 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#ifndef __VULKANMAIN_HPP__
-#define __VULKANMAIN_HPP__
+#ifndef VULKAN_MAIN_HPP
+#define VULKAN_MAIN_HPP
 
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 
@@ -21,14 +21,14 @@
 bool InitVulkan(android_app* app);
 
 // delete vulkan device context when application goes away
-void DeleteVulkan(void);
+void DeleteVulkan();
 
 // Check if vulkan is ready to draw
-bool IsVulkanReady(void);
+bool IsVulkanReady();
 
 // Ask Vulkan to Render a frame
 bool VulkanDrawFrame(android_app* app);
 
-#endif // __VULKANMAIN_HPP__
+#endif // VULKAN_MAIN_HPP
 
 

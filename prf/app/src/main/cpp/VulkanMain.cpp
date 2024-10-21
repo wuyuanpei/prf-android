@@ -252,11 +252,11 @@ bool InitVulkan(android_app *app) {
 
 // IsVulkanReady():
 //    native app poll to see if we are ready to draw...
-bool IsVulkanReady(void) {
+bool IsVulkanReady() {
     return deviceInfo.initialized_;
 }
 
-void DeleteVulkan(void) {
+void DeleteVulkan() {
 
     vkDestroySemaphore(deviceInfo.device_, renderInfo.imageAvailableSemaphore_, nullptr);
     vkDestroyFence(deviceInfo.device_, renderInfo.renderFinishedFence_, nullptr);
@@ -334,7 +334,7 @@ void setImageLayout(VkCommandBuffer cmdBuffer, VkImage image,
                     VkPipelineStageFlags destStages) {
     VkImageMemoryBarrier imageMemoryBarrier = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-            .pNext = NULL,
+            .pNext = nullptr,
             .srcAccessMask = 0,
             .dstAccessMask = 0,
             .oldLayout = oldImageLayout,
@@ -398,6 +398,6 @@ void setImageLayout(VkCommandBuffer cmdBuffer, VkImage image,
             break;
     }
 
-    vkCmdPipelineBarrier(cmdBuffer, srcStages, destStages, 0, 0, NULL, 0, NULL, 1,
+    vkCmdPipelineBarrier(cmdBuffer, srcStages, destStages, 0, 0, nullptr, 0, nullptr, 1,
                          &imageMemoryBarrier);
 }
