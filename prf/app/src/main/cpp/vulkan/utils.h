@@ -47,4 +47,13 @@ struct VulkanSwapchainInfo {
     std::vector<VkFramebuffer> framebuffers_;
 };
 
+// Vulkan RenderPass信息
+struct VulkanRenderInfo {
+    VkRenderPass renderPass_;
+    VkCommandPool cmdPool_;
+    std::vector<VkCommandBuffer> cmdBuffer_; // 每个帧缓冲有一个VkCommandBuffer（3或4）
+    VkSemaphore semaphore_;
+    VkFence fence_;
+};
+
 #endif //PRF_UTILS_H
