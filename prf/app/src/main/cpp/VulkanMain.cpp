@@ -106,6 +106,7 @@ bool InitVulkan(android_app *app) {
     // create vertex buffers
     vertexBuffer = createVertexBuffer(deviceInfo.device_, deviceInfo.physicalDevice_, deviceInfo.queueFamilyIndex_);
 
+    // TODO: pipeline需要维护一个LRU的哈希表
     // Create graphics pipeline
     createGraphicsPipeline(app, deviceInfo.device_, swapchainInfo.displaySize_,
             renderInfo.renderPass_, renderInfo.pipelineCache_, &pipelineInfo);
