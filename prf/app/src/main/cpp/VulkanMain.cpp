@@ -34,6 +34,7 @@
 
 #include "engine2d/utils.h"
 #include "engine2d/pipeline.h"
+#include "engine2d/vertex_buffer.h"
 
 #include <vulkan_wrapper.h>
 
@@ -46,12 +47,7 @@ VulkanSwapchainInfo swapchainInfo;
 VulkanRenderInfo renderInfo;
 
 VulkanPipelineInfo pipelineInfo; // TODO：假设现在只有一个pipeline
-
-// 顶点缓冲
-struct VulkanBufferInfo {
-    VkBuffer vertexBuf_;
-};
-VulkanBufferInfo buffers;
+VkBuffer vertexBuffer; // TODO：假设现在只有一个buffer
 
 /*
  * setImageLayout():
@@ -61,86 +57,6 @@ void setImageLayout(VkCommandBuffer cmdBuffer, VkImage image,
                     VkImageLayout oldImageLayout, VkImageLayout newImageLayout,
                     VkPipelineStageFlags srcStages,
                     VkPipelineStageFlags destStages);
-
-// A helper function
-bool MapMemoryTypeToIndex(uint32_t typeBits, VkFlags requirements_mask,
-                          uint32_t *typeIndex) {
-    VkPhysicalDeviceMemoryProperties memoryProperties;
-    vkGetPhysicalDeviceMemoryProperties(deviceInfo.gpuDevice_, &memoryProperties);
-    // Search mem types to find first index with those properties
-    for (uint32_t i = 0; i < 32; i++) {
-        if ((typeBits & 1) == 1) {
-            // Type is available, does it match user properties?
-            if ((memoryProperties.memoryTypes[i].propertyFlags & requirements_mask) ==
-                requirements_mask) {
-                *typeIndex = i;
-                return true;
-            }
-        }
-        typeBits >>= 1;
-    }
-    return false;
-}
-
-// Create our vertex buffer
-bool CreateBuffers() {
-    // -----------------------------------------------
-    // Create the triangle vertex buffer
-
-    // Vertex positions
-    const float vertexData[] = {
-            -1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
-    };
-
-    // Create a vertex buffer
-    VkBufferCreateInfo createBufferInfo{
-            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .size = sizeof(vertexData),
-            .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-            .queueFamilyIndexCount = 1,
-            .pQueueFamilyIndices = &deviceInfo.queueFamilyIndex_,
-    };
-
-    CALL_VK(vkCreateBuffer(deviceInfo.device_, &createBufferInfo, nullptr,
-                           &buffers.vertexBuf_));
-
-    VkMemoryRequirements memReq;
-    vkGetBufferMemoryRequirements(deviceInfo.device_, buffers.vertexBuf_, &memReq);
-
-    VkMemoryAllocateInfo allocInfo{
-            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-            .pNext = nullptr,
-            .allocationSize = memReq.size,
-            .memoryTypeIndex = 0,  // Memory type assigned in the next step
-    };
-
-    // Assign the proper memory type for that buffer
-    MapMemoryTypeToIndex(memReq.memoryTypeBits,
-                         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                         &allocInfo.memoryTypeIndex);
-
-    // Allocate memory for the buffer
-    VkDeviceMemory deviceMemory;
-    CALL_VK(vkAllocateMemory(deviceInfo.device_, &allocInfo, nullptr, &deviceMemory));
-
-    void *data;
-    CALL_VK(vkMapMemory(deviceInfo.device_, deviceMemory, 0, allocInfo.allocationSize,
-                        0, &data));
-    memcpy(data, vertexData, sizeof(vertexData));
-    vkUnmapMemory(deviceInfo.device_, deviceMemory);
-
-    CALL_VK(
-            vkBindBufferMemory(deviceInfo.device_, buffers.vertexBuf_, deviceMemory, 0));
-    return true;
-}
-
-void DeleteBuffers() {
-    vkDestroyBuffer(deviceInfo.device_, buffers.vertexBuf_, nullptr);
-}
 
 // InitVulkan: Vulkan状态的初始化
 //   Initialize Vulkan Context when android application window is created
@@ -156,13 +72,13 @@ bool InitVulkan(android_app *app) {
     // 依次创建vulkan全局数据结构
     deviceInfo.instance_ = getInstance();
     deviceInfo.surface_ = getSurface(deviceInfo.instance_, app->window);
-    deviceInfo.gpuDevice_ = getPhysicalDevice(deviceInfo.instance_, deviceInfo.surface_);
-    deviceInfo.queueFamilyIndex_ = getQueueFamilyIndex(deviceInfo.gpuDevice_);
-    deviceInfo.device_ = getDevice(deviceInfo.gpuDevice_, deviceInfo.queueFamilyIndex_);
+    deviceInfo.physicalDevice_ = getPhysicalDevice(deviceInfo.instance_, deviceInfo.surface_);
+    deviceInfo.queueFamilyIndex_ = getQueueFamilyIndex(deviceInfo.physicalDevice_);
+    deviceInfo.device_ = getDevice(deviceInfo.physicalDevice_, deviceInfo.queueFamilyIndex_);
     deviceInfo.queue_ = getQueue(deviceInfo.device_, deviceInfo.queueFamilyIndex_);
 
     // 创建交换链
-    getSwapChain(deviceInfo.surface_, deviceInfo.gpuDevice_, deviceInfo.queueFamilyIndex_, deviceInfo.device_, &swapchainInfo);
+    getSwapChain(deviceInfo.surface_, deviceInfo.physicalDevice_, deviceInfo.queueFamilyIndex_, deviceInfo.device_, &swapchainInfo);
 
     // 创建render pass
     renderInfo.renderPass_ = getRenderPass(deviceInfo.device_, swapchainInfo.displayFormat_);
@@ -188,7 +104,7 @@ bool InitVulkan(android_app *app) {
 
 
     // create vertex buffers
-    CreateBuffers();
+    vertexBuffer = createVertexBuffer(deviceInfo.device_, deviceInfo.physicalDevice_, deviceInfo.queueFamilyIndex_);
 
     // Create graphics pipeline
     createGraphicsPipeline(app, deviceInfo.device_, swapchainInfo.displaySize_,
@@ -236,7 +152,7 @@ bool InitVulkan(android_app *app) {
                           VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineInfo.pipeline_);
         VkDeviceSize offset = 0;
         vkCmdBindVertexBuffers(renderInfo.cmdBuffer_[bufferIndex], 0, 1,
-                               &buffers.vertexBuf_, &offset);
+                               &vertexBuffer, &offset);
 
         // Draw Triangle
         vkCmdDraw(renderInfo.cmdBuffer_[bufferIndex], 3, 1, 0, 0);
@@ -275,7 +191,8 @@ void DeleteVulkan() {
     vkDestroyPipeline(deviceInfo.device_, pipelineInfo.pipeline_, nullptr);
     vkDestroyPipelineLayout(deviceInfo.device_, pipelineInfo.layout_, nullptr);
 
-    DeleteBuffers();
+    // TODO: 假设只有一个vertexBuffer
+    vkDestroyBuffer(deviceInfo.device_, vertexBuffer, nullptr);
 
     vkDestroyDevice(deviceInfo.device_, nullptr);
     vkDestroyInstance(deviceInfo.instance_, nullptr);
