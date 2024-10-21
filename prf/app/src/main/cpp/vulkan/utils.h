@@ -52,8 +52,8 @@ struct VulkanRenderInfo {
     VkRenderPass renderPass_;
     VkCommandPool cmdPool_;
     std::vector<VkCommandBuffer> cmdBuffer_; // 每个帧缓冲有一个VkCommandBuffer（3或4）
-    VkSemaphore semaphore_;
-    VkFence fence_;
+    VkSemaphore imageAvailableSemaphore_;
+    VkFence renderFinishedFence_;
 };
 
 #endif //PRF_UTILS_H
