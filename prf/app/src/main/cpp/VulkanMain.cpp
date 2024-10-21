@@ -67,7 +67,7 @@ bool MapMemoryTypeToIndex(uint32_t typeBits, VkFlags requirements_mask,
                           uint32_t *typeIndex) {
     VkPhysicalDeviceMemoryProperties memoryProperties;
     vkGetPhysicalDeviceMemoryProperties(deviceInfo.gpuDevice_, &memoryProperties);
-    // Search memtypes to find first index with those properties
+    // Search mem types to find first index with those properties
     for (uint32_t i = 0; i < 32; i++) {
         if ((typeBits & 1) == 1) {
             // Type is available, does it match user properties?
@@ -83,7 +83,7 @@ bool MapMemoryTypeToIndex(uint32_t typeBits, VkFlags requirements_mask,
 }
 
 // Create our vertex buffer
-bool CreateBuffers(void) {
+bool CreateBuffers() {
     // -----------------------------------------------
     // Create the triangle vertex buffer
 
@@ -138,7 +138,7 @@ bool CreateBuffers(void) {
     return true;
 }
 
-void DeleteBuffers(void) {
+void DeleteBuffers() {
     vkDestroyBuffer(deviceInfo.device_, buffers.vertexBuf_, nullptr);
 }
 
@@ -217,8 +217,8 @@ bool InitVulkan(android_app *app) {
                        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 
-        // Now we start a renderpass. Any draw command has to be recorded in a
-        // renderpass
+        // Now we start a renderPass. Any draw command has to be recorded in a
+        // renderPass
         VkClearValue clearVals{.color {.float32 {0.0f, 0.9f, 0.90f, 1.0f}}};
         VkRenderPassBeginInfo renderPassBeginInfo{
                 .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -271,6 +271,7 @@ void DeleteVulkan(void) {
 
     vkDestroyPipelineCache(deviceInfo.device_, renderInfo.pipelineCache_, nullptr);
 
+    // TODO: 假设只有一个pipeline
     vkDestroyPipeline(deviceInfo.device_, pipelineInfo.pipeline_, nullptr);
     vkDestroyPipelineLayout(deviceInfo.device_, pipelineInfo.layout_, nullptr);
 

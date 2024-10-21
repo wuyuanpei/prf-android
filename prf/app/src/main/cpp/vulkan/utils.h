@@ -14,9 +14,7 @@
 // Vulkan调用封装
 #define CALL_VK(func)                                                 \
   if (VK_SUCCESS != (func)) {                                         \
-    __android_log_print(ANDROID_LOG_ERROR,                            \
-                        "Vulkan error. File[%s], line[%d]", __FILE__, \
-                        __LINE__);                                    \
+    __android_log_print(ANDROID_LOG_ERROR, "Vulkan error. File[%s]", __FILE__);          \
     assert(false);                                                    \
   }
 
