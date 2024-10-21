@@ -100,7 +100,7 @@ bool InitVulkan(android_app *app) {
     renderInfo.pipelineCache_ = getPipelineCache(deviceInfo.device_);
 
 
-// ============================ 以上为初始化完成，以下为每帧的信息（cmdpool可能可以初始化创建）============================
+// ============================ 以上为初始化完成，以下为每帧的信息 ============================
 
 
     // create vertex buffers
@@ -113,7 +113,7 @@ bool InitVulkan(android_app *app) {
     // -----------------------------------------------
 
 
-
+    // TODO: 首先将下面的代码移植到每帧中，其次将vertex buffers，graphics pipeline考虑移植
     for (int bufferIndex = 0; bufferIndex < swapchainInfo.swapchainLength_;
          bufferIndex++) {
         // We start by creating and declare the "beginning" our command buffer
