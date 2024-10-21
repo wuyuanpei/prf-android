@@ -49,7 +49,7 @@ void android_main(struct android_app* app) {
 
     // render if vulkan is ready
     if (IsVulkanReady()) {
-      VulkanDrawFrame();
+      VulkanDrawFrame(app);
     }
   } while (app->destroyRequested == 0);
 }

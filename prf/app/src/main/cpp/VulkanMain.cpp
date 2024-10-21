@@ -30,6 +30,10 @@
 #include "vulkan/command_pool.h"
 #include "vulkan/command_buffers.h"
 #include "vulkan/sync_objects.h"
+#include "vulkan/pipeline_cache.h"
+
+#include "engine2d/utils.h"
+#include "engine2d/pipeline.h"
 
 #include <vulkan_wrapper.h>
 
@@ -37,27 +41,17 @@
 #include <cstring>
 #include <vector>
 
-VulkanDeviceInfo device;
-VulkanSwapchainInfo swapchain;
-VulkanRenderInfo render;
+VulkanDeviceInfo deviceInfo;
+VulkanSwapchainInfo swapchainInfo;
+VulkanRenderInfo renderInfo;
 
+VulkanPipelineInfo pipelineInfo; // TODO：假设现在只有一个pipeline
 
 // 顶点缓冲
 struct VulkanBufferInfo {
     VkBuffer vertexBuf_;
 };
 VulkanBufferInfo buffers;
-
-// 渲染管线信息
-struct VulkanGfxPipelineInfo {
-    VkPipelineLayout layout_;
-    VkPipelineCache cache_; // 对于pipeline的缓存？
-    VkPipeline pipeline_;
-};
-VulkanGfxPipelineInfo gfxPipeline;
-
-// Android Native App pointer...
-android_app *androidAppCtx = nullptr;
 
 /*
  * setImageLayout():
@@ -72,7 +66,7 @@ void setImageLayout(VkCommandBuffer cmdBuffer, VkImage image,
 bool MapMemoryTypeToIndex(uint32_t typeBits, VkFlags requirements_mask,
                           uint32_t *typeIndex) {
     VkPhysicalDeviceMemoryProperties memoryProperties;
-    vkGetPhysicalDeviceMemoryProperties(device.gpuDevice_, &memoryProperties);
+    vkGetPhysicalDeviceMemoryProperties(deviceInfo.gpuDevice_, &memoryProperties);
     // Search memtypes to find first index with those properties
     for (uint32_t i = 0; i < 32; i++) {
         if ((typeBits & 1) == 1) {
@@ -107,14 +101,14 @@ bool CreateBuffers(void) {
             .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
             .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
             .queueFamilyIndexCount = 1,
-            .pQueueFamilyIndices = &device.queueFamilyIndex_,
+            .pQueueFamilyIndices = &deviceInfo.queueFamilyIndex_,
     };
 
-    CALL_VK(vkCreateBuffer(device.device_, &createBufferInfo, nullptr,
+    CALL_VK(vkCreateBuffer(deviceInfo.device_, &createBufferInfo, nullptr,
                            &buffers.vertexBuf_));
 
     VkMemoryRequirements memReq;
-    vkGetBufferMemoryRequirements(device.device_, buffers.vertexBuf_, &memReq);
+    vkGetBufferMemoryRequirements(deviceInfo.device_, buffers.vertexBuf_, &memReq);
 
     VkMemoryAllocateInfo allocInfo{
             .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -131,248 +125,27 @@ bool CreateBuffers(void) {
 
     // Allocate memory for the buffer
     VkDeviceMemory deviceMemory;
-    CALL_VK(vkAllocateMemory(device.device_, &allocInfo, nullptr, &deviceMemory));
+    CALL_VK(vkAllocateMemory(deviceInfo.device_, &allocInfo, nullptr, &deviceMemory));
 
     void *data;
-    CALL_VK(vkMapMemory(device.device_, deviceMemory, 0, allocInfo.allocationSize,
+    CALL_VK(vkMapMemory(deviceInfo.device_, deviceMemory, 0, allocInfo.allocationSize,
                         0, &data));
     memcpy(data, vertexData, sizeof(vertexData));
-    vkUnmapMemory(device.device_, deviceMemory);
+    vkUnmapMemory(deviceInfo.device_, deviceMemory);
 
     CALL_VK(
-            vkBindBufferMemory(device.device_, buffers.vertexBuf_, deviceMemory, 0));
+            vkBindBufferMemory(deviceInfo.device_, buffers.vertexBuf_, deviceMemory, 0));
     return true;
 }
 
 void DeleteBuffers(void) {
-    vkDestroyBuffer(device.device_, buffers.vertexBuf_, nullptr);
-}
-
-enum ShaderType {
-    VERTEX_SHADER, FRAGMENT_SHADER
-};
-
-VkResult loadShaderFromFile(const char *filePath, VkShaderModule *shaderOut,
-                            ShaderType type) {
-    // Read the file
-    assert(androidAppCtx);
-    AAsset *file = AAssetManager_open(androidAppCtx->activity->assetManager,
-                                      filePath, AASSET_MODE_BUFFER);
-    size_t fileLength = AAsset_getLength(file);
-
-    char *fileContent = new char[fileLength];
-
-    AAsset_read(file, fileContent, fileLength);
-    AAsset_close(file);
-
-    VkShaderModuleCreateInfo shaderModuleCreateInfo{
-            .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .codeSize = fileLength,
-            .pCode = (const uint32_t *) fileContent,
-    };
-    VkResult result = vkCreateShaderModule(
-            device.device_, &shaderModuleCreateInfo, nullptr, shaderOut);
-    assert(result == VK_SUCCESS);
-
-    delete[] fileContent;
-
-    return result;
-}
-
-// Create Graphics Pipeline
-VkResult CreateGraphicsPipeline(void) {
-    memset(&gfxPipeline, 0, sizeof(gfxPipeline));
-    // 管线布局（即定义uniform变量）
-    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-            .pNext = nullptr,
-            .setLayoutCount = 0,
-            .pSetLayouts = nullptr,
-            .pushConstantRangeCount = 0,
-            .pPushConstantRanges = nullptr,
-    };
-    CALL_VK(vkCreatePipelineLayout(device.device_, &pipelineLayoutCreateInfo,
-                                   nullptr, &gfxPipeline.layout_));
-
-    VkShaderModule vertexShader, fragmentShader;
-    loadShaderFromFile("shaders/tri.vert.spv", &vertexShader, VERTEX_SHADER);
-    loadShaderFromFile("shaders/tri.frag.spv", &fragmentShader, FRAGMENT_SHADER);
-
-    // Specify vertex and fragment shader stages
-    VkPipelineShaderStageCreateInfo shaderStages[2]{
-            {
-                    .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                    .pNext = nullptr,
-                    .flags = 0,
-                    .stage = VK_SHADER_STAGE_VERTEX_BIT,
-                    .module = vertexShader,
-                    .pName = "main",
-                    .pSpecializationInfo = nullptr,
-            },
-            {
-                    .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                    .pNext = nullptr,
-                    .flags = 0,
-                    .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-                    .module = fragmentShader,
-                    .pName = "main",
-                    .pSpecializationInfo = nullptr,
-            }};
-
-    VkViewport viewports{
-            .x = 0,
-            .y = 0,
-            .width = (float) swapchain.displaySize_.width,
-            .height = (float) swapchain.displaySize_.height,
-            .minDepth = 0.0f,
-            .maxDepth = 1.0f,
-    };
-
-    VkRect2D scissor = {
-            .offset {.x = 0, .y = 0,},
-            .extent = swapchain.displaySize_,
-    };
-    // Specify viewport info
-    VkPipelineViewportStateCreateInfo viewportInfo{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-            .pNext = nullptr,
-            .viewportCount = 1,
-            .pViewports = &viewports,
-            .scissorCount = 1,
-            .pScissors = &scissor,
-    };
-
-    // Specify multisample info
-    VkSampleMask sampleMask = ~0u;
-    VkPipelineMultisampleStateCreateInfo multisampleInfo{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-            .pNext = nullptr,
-            .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
-            .sampleShadingEnable = VK_FALSE,
-            .minSampleShading = 0,
-            .pSampleMask = &sampleMask,
-            .alphaToCoverageEnable = VK_FALSE,
-            .alphaToOneEnable = VK_FALSE,
-    };
-
-    // Specify color blend state
-    VkPipelineColorBlendAttachmentState attachmentStates{
-            .blendEnable = VK_FALSE,
-            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                              VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
-    };
-    VkPipelineColorBlendStateCreateInfo colorBlendInfo{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .logicOpEnable = VK_FALSE,
-            .logicOp = VK_LOGIC_OP_COPY,
-            .attachmentCount = 1,
-            .pAttachments = &attachmentStates,
-    };
-
-    // Specify rasterizer info
-    VkPipelineRasterizationStateCreateInfo rasterInfo{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-            .pNext = nullptr,
-            .depthClampEnable = VK_FALSE,
-            .rasterizerDiscardEnable = VK_FALSE,
-            .polygonMode = VK_POLYGON_MODE_FILL,
-            .cullMode = VK_CULL_MODE_NONE,
-            .frontFace = VK_FRONT_FACE_CLOCKWISE,
-            .depthBiasEnable = VK_FALSE,
-            .lineWidth = 1,
-    };
-
-    // Specify input assembler state
-    VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-            .pNext = nullptr,
-            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-            .primitiveRestartEnable = VK_FALSE,
-    };
-
-    // Specify vertex input state
-    VkVertexInputBindingDescription vertex_input_bindings{
-            .binding = 0,
-            .stride = 3 * sizeof(float),
-            .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-    };
-    VkVertexInputAttributeDescription vertex_input_attributes[1]{{
-                                                                         .location = 0,
-                                                                         .binding = 0,
-                                                                         .format = VK_FORMAT_R32G32B32_SFLOAT,
-                                                                         .offset = 0,
-                                                                 }};
-    VkPipelineVertexInputStateCreateInfo vertexInputInfo{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-            .pNext = nullptr,
-            .vertexBindingDescriptionCount = 1,
-            .pVertexBindingDescriptions = &vertex_input_bindings,
-            .vertexAttributeDescriptionCount = 1,
-            .pVertexAttributeDescriptions = vertex_input_attributes,
-    };
-
-    // Create the pipeline cache
-    VkPipelineCacheCreateInfo pipelineCacheInfo{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,  // reserved, must be 0
-            .initialDataSize = 0,
-            .pInitialData = nullptr,
-    };
-
-    CALL_VK(vkCreatePipelineCache(device.device_, &pipelineCacheInfo, nullptr,
-                                  &gfxPipeline.cache_));
-
-    // Create the pipeline
-    VkGraphicsPipelineCreateInfo pipelineCreateInfo{
-            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .stageCount = 2,
-            .pStages = shaderStages,
-            .pVertexInputState = &vertexInputInfo,
-            .pInputAssemblyState = &inputAssemblyInfo,
-            .pTessellationState = nullptr,
-            .pViewportState = &viewportInfo,
-            .pRasterizationState = &rasterInfo,
-            .pMultisampleState = &multisampleInfo,
-            .pDepthStencilState = nullptr,
-            .pColorBlendState = &colorBlendInfo,
-            .pDynamicState = nullptr,
-            .layout = gfxPipeline.layout_,
-            .renderPass = render.renderPass_,
-            .subpass = 0,
-            .basePipelineHandle = VK_NULL_HANDLE,
-            .basePipelineIndex = 0,
-    };
-
-    VkResult pipelineResult = vkCreateGraphicsPipelines(
-            device.device_, gfxPipeline.cache_, 1, &pipelineCreateInfo, nullptr,
-            &gfxPipeline.pipeline_);
-
-    // We don't need the shaders anymore, we can release their memory
-    vkDestroyShaderModule(device.device_, vertexShader, nullptr);
-    vkDestroyShaderModule(device.device_, fragmentShader, nullptr);
-
-    return pipelineResult;
-}
-
-void DeleteGraphicsPipeline(void) {
-    if (gfxPipeline.pipeline_ == VK_NULL_HANDLE) return;
-    vkDestroyPipeline(device.device_, gfxPipeline.pipeline_, nullptr);
-    vkDestroyPipelineCache(device.device_, gfxPipeline.cache_, nullptr);
-    vkDestroyPipelineLayout(device.device_, gfxPipeline.layout_, nullptr);
+    vkDestroyBuffer(deviceInfo.device_, buffers.vertexBuf_, nullptr);
 }
 
 // InitVulkan: Vulkan状态的初始化
 //   Initialize Vulkan Context when android application window is created
 //   upon return, vulkan is ready to draw frames
 bool InitVulkan(android_app *app) {
-    androidAppCtx = app;
 
     // 获取libvulkan.so中含有的vulkan函数
     if (!InitVulkan()) {
@@ -381,31 +154,34 @@ bool InitVulkan(android_app *app) {
     }
 
     // 依次创建vulkan全局数据结构
-    device.instance_ = getInstance();
-    device.surface_ = getSurface(device.instance_, app->window);
-    device.gpuDevice_ = getPhysicalDevice(device.instance_, device.surface_);
-    device.queueFamilyIndex_ = getQueueFamilyIndex(device.gpuDevice_);
-    device.device_ = getDevice(device.gpuDevice_, device.queueFamilyIndex_);
-    device.queue_ = getQueue(device.device_, device.queueFamilyIndex_);
+    deviceInfo.instance_ = getInstance();
+    deviceInfo.surface_ = getSurface(deviceInfo.instance_, app->window);
+    deviceInfo.gpuDevice_ = getPhysicalDevice(deviceInfo.instance_, deviceInfo.surface_);
+    deviceInfo.queueFamilyIndex_ = getQueueFamilyIndex(deviceInfo.gpuDevice_);
+    deviceInfo.device_ = getDevice(deviceInfo.gpuDevice_, deviceInfo.queueFamilyIndex_);
+    deviceInfo.queue_ = getQueue(deviceInfo.device_, deviceInfo.queueFamilyIndex_);
 
     // 创建交换链
-    getSwapChain(device.surface_, device.gpuDevice_, device.queueFamilyIndex_, device.device_, &swapchain);
+    getSwapChain(deviceInfo.surface_, deviceInfo.gpuDevice_, deviceInfo.queueFamilyIndex_, deviceInfo.device_, &swapchainInfo);
 
     // 创建render pass
-    render.renderPass_ = getRenderPass(device.device_, swapchain.displayFormat_);
+    renderInfo.renderPass_ = getRenderPass(deviceInfo.device_, swapchainInfo.displayFormat_);
 
     // 依次创建Image、imageView、FrameBuffer
-    getFrameBuffers(device.device_, render.renderPass_, &swapchain);
+    getFrameBuffers(deviceInfo.device_, renderInfo.renderPass_, &swapchainInfo);
 
     // 创建指令池
-    render.cmdPool_ = getCommandPool(device.device_, device.queueFamilyIndex_);
+    renderInfo.cmdPool_ = getCommandPool(deviceInfo.device_, deviceInfo.queueFamilyIndex_);
 
     // 创建指令缓冲（为帧缓冲中的每一帧）
-    getCommandBuffers(device.device_, swapchain.swapchainLength_, render.cmdPool_, &render);
+    getCommandBuffers(deviceInfo.device_, swapchainInfo.swapchainLength_, renderInfo.cmdPool_, &renderInfo);
 
     // 创建同步原语
-    getImageAvailableSemaphore(device.device_, &render);
-    getRenderFinishedFence(device.device_, &render);
+    getImageAvailableSemaphore(deviceInfo.device_, &renderInfo);
+    getRenderFinishedFence(deviceInfo.device_, &renderInfo);
+
+    // 创建管线缓存
+    renderInfo.pipelineCache_ = getPipelineCache(deviceInfo.device_);
 
 
 // ============================ 以上为初始化完成，以下为每帧的信息（cmdpool可能可以初始化创建）============================
@@ -415,13 +191,14 @@ bool InitVulkan(android_app *app) {
     CreateBuffers();
 
     // Create graphics pipeline
-    CreateGraphicsPipeline();
+    createGraphicsPipeline(app, deviceInfo.device_, swapchainInfo.displaySize_,
+            renderInfo.renderPass_, renderInfo.pipelineCache_, &pipelineInfo);
 
     // -----------------------------------------------
 
 
 
-    for (int bufferIndex = 0; bufferIndex < swapchain.swapchainLength_;
+    for (int bufferIndex = 0; bufferIndex < swapchainInfo.swapchainLength_;
          bufferIndex++) {
         // We start by creating and declare the "beginning" our command buffer
         VkCommandBufferBeginInfo cmdBufferBeginInfo{
@@ -430,11 +207,11 @@ bool InitVulkan(android_app *app) {
                 .flags = 0,
                 .pInheritanceInfo = nullptr,
         };
-        CALL_VK(vkBeginCommandBuffer(render.cmdBuffer_[bufferIndex],
+        CALL_VK(vkBeginCommandBuffer(renderInfo.cmdBuffer_[bufferIndex],
                                      &cmdBufferBeginInfo));
         // transition the display image to color attachment layout
-        setImageLayout(render.cmdBuffer_[bufferIndex],
-                       swapchain.displayImages_[bufferIndex],
+        setImageLayout(renderInfo.cmdBuffer_[bufferIndex],
+                       swapchainInfo.displayImages_[bufferIndex],
                        VK_IMAGE_LAYOUT_UNDEFINED,
                        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
@@ -446,84 +223,89 @@ bool InitVulkan(android_app *app) {
         VkRenderPassBeginInfo renderPassBeginInfo{
                 .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
                 .pNext = nullptr,
-                .renderPass = render.renderPass_,
-                .framebuffer = swapchain.framebuffers_[bufferIndex],
+                .renderPass = renderInfo.renderPass_,
+                .framebuffer = swapchainInfo.framebuffers_[bufferIndex],
                 .renderArea = {.offset {.x = 0, .y = 0,},
-                        .extent = swapchain.displaySize_},
+                        .extent = swapchainInfo.displaySize_},
                 .clearValueCount = 1,
                 .pClearValues = &clearVals};
-        vkCmdBeginRenderPass(render.cmdBuffer_[bufferIndex], &renderPassBeginInfo,
+        vkCmdBeginRenderPass(renderInfo.cmdBuffer_[bufferIndex], &renderPassBeginInfo,
                              VK_SUBPASS_CONTENTS_INLINE);
         // Bind what is necessary to the command buffer
-        vkCmdBindPipeline(render.cmdBuffer_[bufferIndex],
-                          VK_PIPELINE_BIND_POINT_GRAPHICS, gfxPipeline.pipeline_);
+        vkCmdBindPipeline(renderInfo.cmdBuffer_[bufferIndex],
+                          VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineInfo.pipeline_);
         VkDeviceSize offset = 0;
-        vkCmdBindVertexBuffers(render.cmdBuffer_[bufferIndex], 0, 1,
+        vkCmdBindVertexBuffers(renderInfo.cmdBuffer_[bufferIndex], 0, 1,
                                &buffers.vertexBuf_, &offset);
 
         // Draw Triangle
-        vkCmdDraw(render.cmdBuffer_[bufferIndex], 3, 1, 0, 0);
+        vkCmdDraw(renderInfo.cmdBuffer_[bufferIndex], 3, 1, 0, 0);
 
-        vkCmdEndRenderPass(render.cmdBuffer_[bufferIndex]);
+        vkCmdEndRenderPass(renderInfo.cmdBuffer_[bufferIndex]);
 
-        CALL_VK(vkEndCommandBuffer(render.cmdBuffer_[bufferIndex]));
+        CALL_VK(vkEndCommandBuffer(renderInfo.cmdBuffer_[bufferIndex]));
     }
 
-    device.initialized_ = true;
+    deviceInfo.initialized_ = true;
     return true;
 }
 
 // IsVulkanReady():
 //    native app poll to see if we are ready to draw...
 bool IsVulkanReady(void) {
-    return device.initialized_;
+    return deviceInfo.initialized_;
 }
 
 void DeleteVulkan(void) {
 
-    vkDestroySemaphore(device.device_, render.imageAvailableSemaphore_, nullptr);
-    vkDestroyFence(device.device_, render.renderFinishedFence_, nullptr);
+    vkDestroySemaphore(deviceInfo.device_, renderInfo.imageAvailableSemaphore_, nullptr);
+    vkDestroyFence(deviceInfo.device_, renderInfo.renderFinishedFence_, nullptr);
 
-    vkFreeCommandBuffers(device.device_, render.cmdPool_, render.cmdBuffer_.size(),
-                         render.cmdBuffer_.data());
-    render.cmdBuffer_.clear();
+    vkFreeCommandBuffers(deviceInfo.device_, renderInfo.cmdPool_, renderInfo.cmdBuffer_.size(),
+                         renderInfo.cmdBuffer_.data());
+    renderInfo.cmdBuffer_.clear();
 
-    vkDestroyCommandPool(device.device_, render.cmdPool_, nullptr);
-    vkDestroyRenderPass(device.device_, render.renderPass_, nullptr);
-    DeleteSwapChain(device.device_, &swapchain);
-    DeleteGraphicsPipeline();
+    vkDestroyCommandPool(deviceInfo.device_, renderInfo.cmdPool_, nullptr);
+    vkDestroyRenderPass(deviceInfo.device_, renderInfo.renderPass_, nullptr);
+    DeleteSwapChain(deviceInfo.device_, &swapchainInfo);
+
+    vkDestroyPipelineCache(deviceInfo.device_, renderInfo.pipelineCache_, nullptr);
+
+    vkDestroyPipeline(deviceInfo.device_, pipelineInfo.pipeline_, nullptr);
+    vkDestroyPipelineLayout(deviceInfo.device_, pipelineInfo.layout_, nullptr);
+
     DeleteBuffers();
 
-    vkDestroyDevice(device.device_, nullptr);
-    vkDestroyInstance(device.instance_, nullptr);
+    vkDestroyDevice(deviceInfo.device_, nullptr);
+    vkDestroyInstance(deviceInfo.instance_, nullptr);
 
-    device.initialized_ = false;
+    deviceInfo.initialized_ = false;
 }
 
 // Draw one frame
-bool VulkanDrawFrame(void) {
+bool VulkanDrawFrame(android_app *app) {
     uint32_t nextIndex;
     // Get the framebuffer index we should draw in
-    CALL_VK(vkAcquireNextImageKHR(device.device_, swapchain.swapchain_,
-                                  UINT64_MAX, render.imageAvailableSemaphore_, VK_NULL_HANDLE,
+    CALL_VK(vkAcquireNextImageKHR(deviceInfo.device_, swapchainInfo.swapchain_,
+                                  UINT64_MAX, renderInfo.imageAvailableSemaphore_, VK_NULL_HANDLE,
                                   &nextIndex));
-    CALL_VK(vkResetFences(device.device_, 1, &render.renderFinishedFence_));
+    CALL_VK(vkResetFences(deviceInfo.device_, 1, &renderInfo.renderFinishedFence_));
 
     VkPipelineStageFlags waitStageMask =
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo submit_info = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
             .pNext = nullptr,
             .waitSemaphoreCount = 1,
-            .pWaitSemaphores = &render.imageAvailableSemaphore_,
+            .pWaitSemaphores = &renderInfo.imageAvailableSemaphore_,
             .pWaitDstStageMask = &waitStageMask,
             .commandBufferCount = 1,
-            .pCommandBuffers = &render.cmdBuffer_[nextIndex],
+            .pCommandBuffers = &renderInfo.cmdBuffer_[nextIndex],
             .signalSemaphoreCount = 0,
             .pSignalSemaphores = nullptr};
-    CALL_VK(vkQueueSubmit(device.queue_, 1, &submit_info, render.renderFinishedFence_));
+    CALL_VK(vkQueueSubmit(deviceInfo.queue_, 1, &submit_info, renderInfo.renderFinishedFence_));
 
     // 绘制超时被设置为1秒
-    CALL_VK(vkWaitForFences(device.device_, 1, &render.renderFinishedFence_, VK_TRUE, 1000000000));
+    CALL_VK(vkWaitForFences(deviceInfo.device_, 1, &renderInfo.renderFinishedFence_, VK_TRUE, 1000000000));
 
     // 递交显示
     VkResult result;
@@ -533,11 +315,11 @@ bool VulkanDrawFrame(void) {
             .waitSemaphoreCount = 0,
             .pWaitSemaphores = nullptr,
             .swapchainCount = 1,
-            .pSwapchains = &swapchain.swapchain_,
+            .pSwapchains = &swapchainInfo.swapchain_,
             .pImageIndices = &nextIndex,
             .pResults = &result,
     };
-    vkQueuePresentKHR(device.queue_, &presentInfo);
+    vkQueuePresentKHR(deviceInfo.queue_, &presentInfo);
     return true;
 }
 

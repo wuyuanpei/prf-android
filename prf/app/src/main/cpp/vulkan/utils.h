@@ -2,8 +2,8 @@
 // Created by richardwu on 2024/10/18.
 //
 
-#ifndef PRF_UTILS_H
-#define PRF_UTILS_H
+#ifndef PRF_VULKAN_UTILS_H
+#define PRF_VULKAN_UTILS_H
 
 #include <vulkan_wrapper.h>
 #include "../log.h"
@@ -54,6 +54,7 @@ struct VulkanRenderInfo {
     std::vector<VkCommandBuffer> cmdBuffer_; // 每个帧缓冲有一个VkCommandBuffer（3或4）
     VkSemaphore imageAvailableSemaphore_;
     VkFence renderFinishedFence_;
+    VkPipelineCache pipelineCache_;
 };
 
-#endif //PRF_UTILS_H
+#endif //PRF_VULKAN_UTILS_H
