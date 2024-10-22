@@ -9,7 +9,7 @@
 #include <vulkan_wrapper.h>
 #include "../vulkan/utils.h"
 
-VkShaderModule loadShaderFromFile(android_app *androidAppCtx, VkDevice device, const char *filePath) {
+static VkShaderModule loadShaderFromFile(android_app *androidAppCtx, VkDevice device, const char *filePath) {
     // Read the file
     assert(androidAppCtx);
     AAsset *file = AAssetManager_open(androidAppCtx->activity->assetManager,

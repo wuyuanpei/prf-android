@@ -9,7 +9,7 @@
 #include "../vulkan/utils.h"
 
 // A helper function
-bool mapMemoryTypeToIndex(VkPhysicalDevice physicalDevice, uint32_t typeBits,
+static bool mapMemoryTypeToIndex(VkPhysicalDevice physicalDevice, uint32_t typeBits,
                           VkFlags requirements_mask, uint32_t *typeIndex) {
     VkPhysicalDeviceMemoryProperties memoryProperties;
     vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memoryProperties);
@@ -33,7 +33,7 @@ bool mapMemoryTypeToIndex(VkPhysicalDevice physicalDevice, uint32_t typeBits,
 * 我们想要在使用vertex buffer的同时使用暂存缓冲提升性能
 * 可以使用不同的大小、usage、properties
 */
-void createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize size,
+static void createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VkDeviceSize size,
                   VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer &buffer, VkDeviceMemory &bufferMemory)
 {
     VkBufferCreateInfo bufferInfo = {};
