@@ -31,7 +31,8 @@ add_library(${CMAKE_PROJECT_NAME} SHARED
     VulkanMain.cpp
     ${COMMON_DIR}/vulkan_wrapper/vulkan_wrapper.cpp
     AndroidMain.cpp
-    ${COMMON_DIR}/src/GameActivitySources.cpp)
+    ${COMMON_DIR}/src/GameActivitySources.cpp
+    engine2d/BufferManager.cpp)
 
 include_directories(${COMMON_DIR}/vulkan_wrapper)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wall \

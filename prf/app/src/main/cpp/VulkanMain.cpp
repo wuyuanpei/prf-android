@@ -36,6 +36,7 @@
 #include "engine2d/pipeline.h"
 #include "engine2d/buffer.h"
 #include "engine2d/image_layout.h"
+#include "engine2d/BufferManager.h"
 
 #include <vulkan_wrapper.h>
 
