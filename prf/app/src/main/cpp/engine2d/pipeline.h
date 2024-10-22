@@ -155,13 +155,13 @@ void createGraphicsPipeline(android_app *androidAppCtx, VkDevice device, VkExten
     // Specify vertex input state
     VkVertexInputBindingDescription vertex_input_bindings{
             .binding = 0,
-            .stride = 3 * sizeof(float),
+            .stride = 2 * sizeof(float), // 二维顶点
             .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
     };
     VkVertexInputAttributeDescription vertex_input_attributes[1]{{
                                                                          .location = 0,
                                                                          .binding = 0,
-                                                                         .format = VK_FORMAT_R32G32B32_SFLOAT,
+                                                                         .format = VK_FORMAT_R32G32_SFLOAT, // 二维顶点
                                                                          .offset = 0,
                                                                  }};
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{

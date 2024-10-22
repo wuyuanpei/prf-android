@@ -34,7 +34,7 @@
 
 #include "engine2d/utils.h"
 #include "engine2d/pipeline.h"
-#include "engine2d/vertex_buffer.h"
+#include "engine2d/buffer.h"
 #include "engine2d/image_layout.h"
 
 #include <vulkan_wrapper.h>
@@ -49,7 +49,8 @@ VulkanSwapchainInfo swapchainInfo;
 VulkanRenderInfo renderInfo;
 
 VulkanPipelineInfo pipelineInfo; // TODO：假设现在只有一个pipeline
-VkBuffer vertexBuffer; // TODO：假设现在只有一个buffer
+VulkanBufferInfo vertexBufferInfo; // TODO：假设现在只有一个buffer
+VulkanBufferInfo indexBufferInfo; // TODO：假设现在只有一个buffer
 
 /*
  * setImageLayout():
@@ -106,7 +107,11 @@ bool InitVulkan(android_app *app) {
 
     // TODO：需要为每个2的整次幂维护一个可用VkBuffer的列表进行复用（全局数据结构）
     // Create vertex buffers
-    vertexBuffer = createVertexBuffer(deviceInfo.device_, deviceInfo.physicalDevice_, deviceInfo.queueFamilyIndex_);
+    createVertexBuffer(deviceInfo.device_, deviceInfo.physicalDevice_, &vertexBufferInfo);
+
+    // TODO：需要为每个2的整次幂维护一个可用VkBuffer的列表进行复用（全局数据结构）
+    // Create index buffers
+    createIndexBuffer(deviceInfo.device_, deviceInfo.physicalDevice_, &indexBufferInfo);
 
     // TODO: pipeline需要维护一个LRU的哈希表（全局数据结构）
     // Create graphics pipeline
@@ -143,7 +148,12 @@ void DeleteVulkan() {
     vkDestroyPipelineLayout(deviceInfo.device_, pipelineInfo.layout_, nullptr);
 
     // TODO: 假设只有一个vertexBuffer
-    vkDestroyBuffer(deviceInfo.device_, vertexBuffer, nullptr);
+    vkDestroyBuffer(deviceInfo.device_, vertexBufferInfo.buffer_, nullptr);
+    vkFreeMemory(deviceInfo.device_, vertexBufferInfo.bufferMemory_, nullptr);
+
+    // TODO: 假设只有一个indexBuffer
+    vkDestroyBuffer(deviceInfo.device_, indexBufferInfo.buffer_, nullptr);
+    vkFreeMemory(deviceInfo.device_, indexBufferInfo.bufferMemory_, nullptr);
 
     vkDestroyDevice(deviceInfo.device_, nullptr);
     vkDestroyInstance(deviceInfo.instance_, nullptr);
@@ -175,13 +185,13 @@ bool VulkanDrawFrame(android_app *app) {
     };
     CALL_VK(vkBeginCommandBuffer(renderInfo.cmdBuffer_[nextIndex],
                                  &cmdBufferBeginInfo));
-    // transition the display image to color attachment layout // TODO: 这里格式转换的必要性？
-    setImageLayout(renderInfo.cmdBuffer_[nextIndex],
-                   swapchainInfo.displayImages_[nextIndex],
-                   VK_IMAGE_LAYOUT_UNDEFINED,
-                   VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                   VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                   VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+//    // transition the display image to color attachment layout // TODO: 这里格式转换的必要性？
+//    setImageLayout(renderInfo.cmdBuffer_[nextIndex],
+//                   swapchainInfo.displayImages_[nextIndex],
+//                   VK_IMAGE_LAYOUT_UNDEFINED,
+//                   VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+//                   VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+//                   VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 
     // Now we start a renderPass. Any draw command has to be recorded in a
     // renderPass
@@ -205,10 +215,12 @@ bool VulkanDrawFrame(android_app *app) {
 
     VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(renderInfo.cmdBuffer_[nextIndex], 0, 1,
-                           &vertexBuffer, &offset);
+                           &vertexBufferInfo.buffer_, &offset);
 
+
+    vkCmdBindIndexBuffer(renderInfo.cmdBuffer_[nextIndex], indexBufferInfo.buffer_, 0, VK_INDEX_TYPE_UINT16);
     // Draw Triangle
-    vkCmdDraw(renderInfo.cmdBuffer_[nextIndex], 3, 1, 0, 0);
+    vkCmdDrawIndexed(renderInfo.cmdBuffer_[nextIndex], 6, 1, 0, 0, 0);
 
     vkCmdEndRenderPass(renderInfo.cmdBuffer_[nextIndex]);
 
