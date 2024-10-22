@@ -41,6 +41,7 @@
 #include <cassert>
 #include <cstring>
 #include <vector>
+#include <stdlib.h>
 
 VulkanDeviceInfo deviceInfo;
 VulkanSwapchainInfo swapchainInfo;
@@ -65,7 +66,7 @@ bool InitVulkan(android_app *app) {
 
     // 获取libvulkan.so中含有的vulkan函数
     if (!InitVulkan()) {
-        LOGW("Vulkan is unavailable, install vulkan and re-start");
+        LOGE("Vulkan is unavailable, install vulkan and re-start");
         return false;
     }
 
@@ -102,66 +103,14 @@ bool InitVulkan(android_app *app) {
 
 // ============================ 以上为初始化完成，以下为每帧的信息 ============================
 
-
-    // create vertex buffers
+    // TODO：需要为每个2的整次幂维护一个可用VkBuffer的列表进行复用（全局数据结构）
+    // Create vertex buffers
     vertexBuffer = createVertexBuffer(deviceInfo.device_, deviceInfo.physicalDevice_, deviceInfo.queueFamilyIndex_);
 
-    // TODO: pipeline需要维护一个LRU的哈希表
+    // TODO: pipeline需要维护一个LRU的哈希表（全局数据结构）
     // Create graphics pipeline
     createGraphicsPipeline(app, deviceInfo.device_, swapchainInfo.displaySize_,
             renderInfo.renderPass_, renderInfo.pipelineCache_, &pipelineInfo);
-
-    // -----------------------------------------------
-
-
-    // TODO: 首先将下面的代码移植到每帧中，其次将vertex buffers，graphics pipeline考虑移植
-    for (int bufferIndex = 0; bufferIndex < swapchainInfo.swapchainLength_;
-         bufferIndex++) {
-        // We start by creating and declare the "beginning" our command buffer
-        VkCommandBufferBeginInfo cmdBufferBeginInfo{
-                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-                .pNext = nullptr,
-                .flags = 0,
-                .pInheritanceInfo = nullptr,
-        };
-        CALL_VK(vkBeginCommandBuffer(renderInfo.cmdBuffer_[bufferIndex],
-                                     &cmdBufferBeginInfo));
-        // transition the display image to color attachment layout
-        setImageLayout(renderInfo.cmdBuffer_[bufferIndex],
-                       swapchainInfo.displayImages_[bufferIndex],
-                       VK_IMAGE_LAYOUT_UNDEFINED,
-                       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                       VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
-
-        // Now we start a renderPass. Any draw command has to be recorded in a
-        // renderPass
-        VkClearValue clearVals{.color {.float32 {0.0f, 0.9f, 0.90f, 1.0f}}};
-        VkRenderPassBeginInfo renderPassBeginInfo{
-                .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-                .pNext = nullptr,
-                .renderPass = renderInfo.renderPass_,
-                .framebuffer = swapchainInfo.framebuffers_[bufferIndex],
-                .renderArea = {.offset {.x = 0, .y = 0,},
-                        .extent = swapchainInfo.displaySize_},
-                .clearValueCount = 1,
-                .pClearValues = &clearVals};
-        vkCmdBeginRenderPass(renderInfo.cmdBuffer_[bufferIndex], &renderPassBeginInfo,
-                             VK_SUBPASS_CONTENTS_INLINE);
-        // Bind what is necessary to the command buffer
-        vkCmdBindPipeline(renderInfo.cmdBuffer_[bufferIndex],
-                          VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineInfo.pipeline_);
-        VkDeviceSize offset = 0;
-        vkCmdBindVertexBuffers(renderInfo.cmdBuffer_[bufferIndex], 0, 1,
-                               &vertexBuffer, &offset);
-
-        // Draw Triangle
-        vkCmdDraw(renderInfo.cmdBuffer_[bufferIndex], 3, 1, 0, 0);
-
-        vkCmdEndRenderPass(renderInfo.cmdBuffer_[bufferIndex]);
-
-        CALL_VK(vkEndCommandBuffer(renderInfo.cmdBuffer_[bufferIndex]));
-    }
 
     deviceInfo.initialized_ = true;
     return true;
@@ -203,6 +152,8 @@ void DeleteVulkan() {
 
 // Draw one frame
 bool VulkanDrawFrame(android_app *app) {
+
+    // 获取图片index
     uint32_t nextIndex;
     // Get the framebuffer index we should draw in
     CALL_VK(vkAcquireNextImageKHR(deviceInfo.device_, swapchainInfo.swapchain_,
@@ -210,6 +161,57 @@ bool VulkanDrawFrame(android_app *app) {
                                   &nextIndex));
     CALL_VK(vkResetFences(deviceInfo.device_, 1, &renderInfo.renderFinishedFence_));
 
+    // 填写绘制命令
+    // We start by reset the command
+    vkResetCommandBuffer(renderInfo.cmdBuffer_[nextIndex], 0);
+
+    // We create and declare the "beginning" our command buffer
+    VkCommandBufferBeginInfo cmdBufferBeginInfo{
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .pInheritanceInfo = nullptr,
+    };
+    CALL_VK(vkBeginCommandBuffer(renderInfo.cmdBuffer_[nextIndex],
+                                 &cmdBufferBeginInfo));
+    // transition the display image to color attachment layout // TODO: 这里格式转换的必要性？
+    setImageLayout(renderInfo.cmdBuffer_[nextIndex],
+                   swapchainInfo.displayImages_[nextIndex],
+                   VK_IMAGE_LAYOUT_UNDEFINED,
+                   VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                   VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                   VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+
+    // Now we start a renderPass. Any draw command has to be recorded in a
+    // renderPass
+    VkClearValue clearVals{.color {.float32 {(float)rand() / RAND_MAX, (float)rand() / RAND_MAX, (float)rand() / RAND_MAX, 0.0f}}};
+    VkRenderPassBeginInfo renderPassBeginInfo{
+            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .pNext = nullptr,
+            .renderPass = renderInfo.renderPass_,
+            .framebuffer = swapchainInfo.framebuffers_[nextIndex],
+            .renderArea = {.offset {.x = 0, .y = 0,},
+                    .extent = swapchainInfo.displaySize_},
+            .clearValueCount = 1,
+            .pClearValues = &clearVals};
+    vkCmdBeginRenderPass(renderInfo.cmdBuffer_[nextIndex], &renderPassBeginInfo,
+                         VK_SUBPASS_CONTENTS_INLINE);
+    // Bind what is necessary to the command buffer
+    vkCmdBindPipeline(renderInfo.cmdBuffer_[nextIndex],
+                      VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineInfo.pipeline_);
+    VkDeviceSize offset = 0;
+    vkCmdBindVertexBuffers(renderInfo.cmdBuffer_[nextIndex], 0, 1,
+                           &vertexBuffer, &offset);
+
+    // Draw Triangle
+    vkCmdDraw(renderInfo.cmdBuffer_[nextIndex], 3, 1, 0, 0);
+
+    vkCmdEndRenderPass(renderInfo.cmdBuffer_[nextIndex]);
+
+    CALL_VK(vkEndCommandBuffer(renderInfo.cmdBuffer_[nextIndex]));
+
+
+    // 提交指令
     VkPipelineStageFlags waitStageMask =
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo submit_info = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -222,8 +224,7 @@ bool VulkanDrawFrame(android_app *app) {
             .signalSemaphoreCount = 0,
             .pSignalSemaphores = nullptr};
     CALL_VK(vkQueueSubmit(deviceInfo.queue_, 1, &submit_info, renderInfo.renderFinishedFence_));
-
-    // 绘制超时被设置为1秒
+    // Wait timeout set to 1 second
     CALL_VK(vkWaitForFences(deviceInfo.device_, 1, &renderInfo.renderFinishedFence_, VK_TRUE, 1000000000));
 
     // 递交显示
