@@ -13,7 +13,7 @@ VkRenderPass getRenderPass(VkDevice device, VkFormat format) {
             .format = format,
             .samples = VK_SAMPLE_COUNT_1_BIT, // 采样数
             //下面两个会对颜色缓冲和深度缓冲奏效
-            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, // 现有buffer会被清除
+            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, // 现有buffer会被用一个颜色清除
             .storeOp = VK_ATTACHMENT_STORE_OP_STORE, // 渲染内容会被储存起来，以便之后读取
             .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
             .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
