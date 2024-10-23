@@ -76,6 +76,7 @@ VulkanBufferInfo BufferManager::allocBuffer(uint32_t frameIndex, uint64_t size) 
         // 创建
         VulkanBufferInfo bufferInfo;
         createBuffer(size, bufferInfo.buffer_, bufferInfo.bufferMemory_);
+        bufferInfo.size_ = size;
 
         // 加入
         usedBufferLists_[frameIndex].push_back(bufferInfo);
@@ -137,4 +138,28 @@ void BufferManager::createBuffer(VkDeviceSize size, VkBuffer &buffer, VkDeviceMe
     CALL_VK(vkAllocateMemory(device_, &allocInfo, nullptr, &bufferMemory));
 
     vkBindBufferMemory(device_, buffer, bufferMemory, 0);
+}
+
+void BufferManager::dump() {
+    std::unique_lock<std::mutex> locker(mutex_);
+
+    std::string usageStr;
+    if (usage_ == VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) {
+        usageStr = "vertex";
+    } else if (usage_ == VK_BUFFER_USAGE_INDEX_BUFFER_BIT) {
+        usageStr = "index";
+    } else {
+        usageStr = "unknown";
+    }
+    LOGI("%s buffer manager:", usageStr.c_str());
+
+    LOGI("\tfreeBufferLists_:");
+    for(auto iter = freeBufferLists_.begin(); iter != freeBufferLists_.end(); iter++) {
+        LOGI("\t\t[%d] size %d", iter->first, iter->second.size());
+    }
+
+    LOGI("\tusedBufferLists_:");
+    for(auto iter = usedBufferLists_.begin(); iter != usedBufferLists_.end(); iter++) {
+        LOGI("\t\t[%d] size %d", iter->first, iter->second.size());
+    }
 }

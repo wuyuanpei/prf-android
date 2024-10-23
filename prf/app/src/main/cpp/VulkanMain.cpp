@@ -172,6 +172,9 @@ bool VulkanDrawFrame(android_app *app) {
     vertexBufferManager->freeAllBuffers(nextIndex);
     indexBufferManager->freeAllBuffers(nextIndex);
 
+//    vertexBufferManager->dump();
+//    indexBufferManager->dump();
+
     // We create and declare the "beginning" our command buffer
     VkCommandBufferBeginInfo cmdBufferBeginInfo{
             .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,

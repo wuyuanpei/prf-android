@@ -10,6 +10,7 @@
 #include <map>
 #include <list>
 #include <mutex>
+#include <string>
 
 // 缓冲管理信息
 struct VulkanBufferInfo {
@@ -29,6 +30,8 @@ public:
     ~BufferManager(); // 释放所有的VkBuffer和VkDeviceMemory
     void freeAllBuffers(uint32_t frameIndex); // 归还该帧使用的所有缓冲
     VulkanBufferInfo allocBuffer(uint32_t frameIndex, uint64_t size); // 为帧frameIndex申请一个大小至少为size的VkBuffer
+
+    void dump(); // 以log的形式打印 for debug
 
 private:
     VkDevice device_;
