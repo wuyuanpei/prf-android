@@ -12,6 +12,7 @@ BufferManager::BufferManager(VkDevice device, VkPhysicalDevice physicalDevice, V
 }
 
 BufferManager::~BufferManager() {
+    std::unique_lock<std::mutex> locker(mutex_);
     // 释放所有的VkBuffer和VkDeviceMemory
     for(auto iter = freeBufferLists_.begin(); iter != freeBufferLists_.end(); iter++) {
         while (!iter->second.empty()) {
@@ -39,6 +40,7 @@ BufferManager::~BufferManager() {
 }
 
 void BufferManager::freeAllBuffers(uint32_t frameIndex) {
+    std::unique_lock<std::mutex> locker(mutex_);
     std::list<VulkanBufferInfo>& usedBufferList = usedBufferLists_[frameIndex];
 
     // 将所有VkBuffer还至freeBufferLists_
@@ -54,6 +56,7 @@ void BufferManager::freeAllBuffers(uint32_t frameIndex) {
 }
 
 VulkanBufferInfo BufferManager::allocBuffer(uint32_t frameIndex, uint64_t size) {
+    std::unique_lock<std::mutex> locker(mutex_);
     size = roundUpToPowerOfTwo(size);
     std::list<VulkanBufferInfo>& freeBufferList = freeBufferLists_[size];
 
@@ -90,7 +93,6 @@ uint64_t BufferManager::roundUpToPowerOfTwo(uint64_t size) {
 }
 
 /* 创建VkBuffer的一系辅助函数 */
-
 bool BufferManager::mapMemoryTypeToIndex(uint32_t typeBits, VkFlags requirements_mask, uint32_t *typeIndex) {
     VkPhysicalDeviceMemoryProperties memoryProperties;
     vkGetPhysicalDeviceMemoryProperties(physicalDevice_, &memoryProperties);

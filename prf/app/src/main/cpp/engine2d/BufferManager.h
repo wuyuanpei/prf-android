@@ -9,6 +9,7 @@
 
 #include <map>
 #include <list>
+#include <mutex>
 
 // 缓冲管理信息
 struct VulkanBufferInfo {
@@ -33,6 +34,8 @@ private:
     VkDevice device_;
     VkPhysicalDevice physicalDevice_;
     VkBufferUsageFlags usage_;
+
+    std::mutex mutex_; // 保护下面两个list
 
     const uint64_t MIN_BUFFER_SIZE = 32L;
     std::map<uint64_t, std::list<VulkanBufferInfo>> freeBufferLists_; // 按照2的整数次幂管理所有free buffers
