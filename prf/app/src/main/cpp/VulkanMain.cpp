@@ -196,8 +196,7 @@ bool VulkanDrawFrame(android_app *app) {
 
     // Now we start a renderPass. Any draw command has to be recorded in a
     // renderPass
-    VkClearValue clearVals = {(float)rand() / RAND_MAX, (float)rand() / RAND_MAX,
-                              (float)rand() / RAND_MAX, 0.0f};
+    VkClearValue clearVals = {{{1.0f, 1.0f, 1.0f, 0.0f}}};
     VkRenderPassBeginInfo renderPassBeginInfo{
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
             .pNext = nullptr,

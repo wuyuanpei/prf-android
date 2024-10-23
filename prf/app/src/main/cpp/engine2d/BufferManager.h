@@ -7,13 +7,13 @@
 
 /*
  * 管理系统中所有的VkBuffer
- * 有两个实例，处理index buffer或vertex buffer
+ * 暂时有两个实例，处理index buffer或vertex buffer
  */
 class BufferManager
 {
 public:
     BufferManager();
-    
+
 
 };
 
