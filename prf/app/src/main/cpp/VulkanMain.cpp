@@ -34,7 +34,6 @@
 
 #include "engine2d/utils.h"
 #include "engine2d/pipeline.h"
-#include "engine2d/buffer.h"
 #include "engine2d/image_layout.h"
 #include "engine2d/BufferManager.h"
 
@@ -50,8 +49,10 @@ VulkanSwapchainInfo swapchainInfo;
 VulkanRenderInfo renderInfo;
 
 VulkanPipelineInfo pipelineInfo; // TODO：假设现在只有一个pipeline
-VulkanBufferInfo vertexBufferInfo; // TODO：假设现在只有一个buffer
-VulkanBufferInfo indexBufferInfo; // TODO：假设现在只有一个buffer
+
+/* 管理系统全局的所有各类型的VkBuffer */
+BufferManager *vertexBufferManager;
+BufferManager *indexBufferManager;
 
 /*
  * setImageLayout():
@@ -104,15 +105,11 @@ bool InitVulkan(android_app *app) {
     renderInfo.pipelineCache_ = getPipelineCache(deviceInfo.device_);
 
 
-// ============================ 以上为初始化完成，以下为每帧的信息 ============================
+// ============================ 以下为2d引擎资源管理器 ============================
 
-    // TODO：需要为每个2的整次幂维护一个可用VkBuffer的列表进行复用（全局数据结构）
-    // Create vertex buffers
-    createVertexBuffer(deviceInfo.device_, deviceInfo.physicalDevice_, &vertexBufferInfo);
-
-    // TODO：需要为每个2的整次幂维护一个可用VkBuffer的列表进行复用（全局数据结构）
-    // Create index buffers
-    createIndexBuffer(deviceInfo.device_, deviceInfo.physicalDevice_, &indexBufferInfo);
+    // 为每个2的整次幂维护一个可用VkBuffer的列表进行复用（全局数据结构）
+    vertexBufferManager = new BufferManager(deviceInfo.device_, deviceInfo.physicalDevice_, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+    indexBufferManager = new BufferManager(deviceInfo.device_, deviceInfo.physicalDevice_, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
 
     // TODO: pipeline需要维护一个LRU的哈希表（全局数据结构）
     // Create graphics pipeline
@@ -148,13 +145,9 @@ void DeleteVulkan() {
     vkDestroyPipeline(deviceInfo.device_, pipelineInfo.pipeline_, nullptr);
     vkDestroyPipelineLayout(deviceInfo.device_, pipelineInfo.layout_, nullptr);
 
-    // TODO: 假设只有一个vertexBuffer
-    vkDestroyBuffer(deviceInfo.device_, vertexBufferInfo.buffer_, nullptr);
-    vkFreeMemory(deviceInfo.device_, vertexBufferInfo.bufferMemory_, nullptr);
-
-    // TODO: 假设只有一个indexBuffer
-    vkDestroyBuffer(deviceInfo.device_, indexBufferInfo.buffer_, nullptr);
-    vkFreeMemory(deviceInfo.device_, indexBufferInfo.bufferMemory_, nullptr);
+    // 调用析构函数，释放VkBuffer与VkDeviceMemory
+    delete vertexBufferManager;
+    delete indexBufferManager;
 
     vkDestroyDevice(deviceInfo.device_, nullptr);
     vkDestroyInstance(deviceInfo.instance_, nullptr);
@@ -174,8 +167,10 @@ bool VulkanDrawFrame(android_app *app) {
     CALL_VK(vkResetFences(deviceInfo.device_, 1, &renderInfo.renderFinishedFence_));
 
     // 填写绘制命令
-    // We start by reset the command
+    // 首先，重置该帧在上次轮转时使用的资源
     vkResetCommandBuffer(renderInfo.cmdBuffer_[nextIndex], 0);
+    vertexBufferManager->freeAllBuffers(nextIndex);
+    indexBufferManager->freeAllBuffers(nextIndex);
 
     // We create and declare the "beginning" our command buffer
     VkCommandBufferBeginInfo cmdBufferBeginInfo{
@@ -213,10 +208,24 @@ bool VulkanDrawFrame(android_app *app) {
     vkCmdBindPipeline(renderInfo.cmdBuffer_[nextIndex],
                       VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineInfo.pipeline_);
 
+    // 获取并填充VkBuffer
+    const float vertexData[] = {-0.5f, -0.5f, 0.5f, -0.5f, 0.5f, 0.5f, -0.5f, 0.5};
+    VulkanBufferInfo vertexBufferInfo = vertexBufferManager->allocBuffer(nextIndex, sizeof(vertexData));
+    void *data;
+    vkMapMemory(deviceInfo.device_, vertexBufferInfo.bufferMemory_, 0, sizeof(vertexData),0, &data);
+    memcpy(data, vertexData, sizeof(vertexData));
+    vkUnmapMemory(deviceInfo.device_, vertexBufferInfo.bufferMemory_);
+
     VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(renderInfo.cmdBuffer_[nextIndex], 0, 1,
                            &vertexBufferInfo.buffer_, &offset);
 
+
+    const uint16_t indexData[] = {0, 1, 2, 2, 3, 0};
+    VulkanBufferInfo indexBufferInfo = indexBufferManager->allocBuffer(nextIndex, sizeof(indexData));
+    vkMapMemory(deviceInfo.device_, indexBufferInfo.bufferMemory_, 0, sizeof(indexData),0, &data);
+    memcpy(data, indexData, sizeof(indexData));
+    vkUnmapMemory(deviceInfo.device_, indexBufferInfo.bufferMemory_);
 
     vkCmdBindIndexBuffer(renderInfo.cmdBuffer_[nextIndex], indexBufferInfo.buffer_, 0, VK_INDEX_TYPE_UINT16);
     // Draw Triangle

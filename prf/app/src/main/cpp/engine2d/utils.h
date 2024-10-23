@@ -13,10 +13,4 @@ struct VulkanPipelineInfo {
     VkPipeline pipeline_;
 };
 
-// 缓冲管理信息
-struct VulkanBufferInfo {
-    VkBuffer buffer_;
-    VkDeviceMemory bufferMemory_;
-};
-
 #endif //PRF_ENGINE2D_UTILS_H

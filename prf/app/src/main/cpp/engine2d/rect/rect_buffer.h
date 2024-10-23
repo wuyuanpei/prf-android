@@ -7,15 +7,15 @@
 
 #include "../../vulkan/utils.h"
 #include "../utils.h"
-#include "../buffer.h"
+#include "../BufferManager.h"
 
-void createRectVertexBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VulkanBufferInfo *vertexBufferInfo) {
-    createVertexBuffer(device, physicalDevice, vertexBufferInfo);
-}
-
-
-void createRectIndexBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VulkanBufferInfo *indexBufferInfo) {
-    createIndexBuffer(device, physicalDevice, indexBufferInfo);
-}
+//void createRectVertexBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VulkanBufferInfo *vertexBufferInfo) {
+//    createVertexBuffer(device, physicalDevice, vertexBufferInfo);
+//}
+//
+//
+//void createRectIndexBuffer(VkDevice device, VkPhysicalDevice physicalDevice, VulkanBufferInfo *indexBufferInfo) {
+//    createIndexBuffer(device, physicalDevice, indexBufferInfo);
+//}
 
 #endif //PRF_RECT_BUFFER_H
