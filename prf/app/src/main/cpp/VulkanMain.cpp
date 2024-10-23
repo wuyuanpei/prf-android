@@ -211,24 +211,25 @@ bool VulkanDrawFrame(android_app *app) {
     vkCmdBindPipeline(renderInfo.cmdBuffer_[nextIndex],
                       VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineInfo.pipeline_);
 
-    // 获取并填充VkBuffer
+    // 获取并填充VkBuffer////////////////////////TODO: 移入2d引擎中
     const float vertexData[] = {-0.5f, -0.5f, 0.5f, -0.5f, 0.5f, 0.5f, -0.5f, 0.5};
     VulkanBufferInfo vertexBufferInfo = vertexBufferManager->allocBuffer(nextIndex, sizeof(vertexData));
     void *data;
     vkMapMemory(deviceInfo.device_, vertexBufferInfo.bufferMemory_, 0, sizeof(vertexData),0, &data);
     memcpy(data, vertexData, sizeof(vertexData));
     vkUnmapMemory(deviceInfo.device_, vertexBufferInfo.bufferMemory_);
-
+    ///////////////////////////////////////////////////////////////////////////
     VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(renderInfo.cmdBuffer_[nextIndex], 0, 1,
                            &vertexBufferInfo.buffer_, &offset);
 
-
+    // 获取并填充VkBuffer////////////////////////TODO: 移入2d引擎中
     const uint16_t indexData[] = {0, 1, 2, 2, 3, 0};
     VulkanBufferInfo indexBufferInfo = indexBufferManager->allocBuffer(nextIndex, sizeof(indexData));
     vkMapMemory(deviceInfo.device_, indexBufferInfo.bufferMemory_, 0, sizeof(indexData),0, &data);
     memcpy(data, indexData, sizeof(indexData));
     vkUnmapMemory(deviceInfo.device_, indexBufferInfo.bufferMemory_);
+    ///////////////////////////////////////////////////////////////////////////
 
     vkCmdBindIndexBuffer(renderInfo.cmdBuffer_[nextIndex], indexBufferInfo.buffer_, 0, VK_INDEX_TYPE_UINT16);
     // Draw Triangle
